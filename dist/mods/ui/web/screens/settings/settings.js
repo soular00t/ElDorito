@@ -9,6 +9,10 @@ var commandValues = [];
 var vetoEnabled;
 var unlimitedSprint;
 var hasGP = false;
+var axisThreshold = .5;
+var stickTicks = { left: 0, right: 0, up: 0, down: 0 };
+var repGP;
+var lastHeldUpdated = 0;
 
 var h3ColorArray = ['#626262','#B0B0B0','#DEDEDE','#9B3332','#DB6766','#EE807F','#DB8B00','#F8AE58','#FECB9C','#CCAE2C','#F3BC2B','#FDD879','#57741A','#90A560','#D8EFA7','#31787E','#4ABBC1','#91EDEC','#325992','#5588DB','#97B5F5','#553E8F','#9175E3','#C4B4FD','#830147','#D23C83','#FC8BB9','#513714 ','#AC8A6E','#E0BEA2'];
 var settingsToLoad = [
@@ -467,6 +471,7 @@ $(document).ready(function(){
         }
         setOptionList('sAudioDevice', audioDevArray);
     });
+    
     dew.on('controllerinput', function(e){    
         if(hasGP){    
             if(e.data.A == 1){
@@ -512,12 +517,77 @@ $(document).ready(function(){
             if(e.data.Start == 1){
                 applyButton();
             }
+            if(e.data.LeftTrigger != 0){
+                rotateBiped('left');
+            }
+            if(e.data.RightTrigger != 0){
+                rotateBiped('right');
+            }
+            if(e.data.AxisLeftX != 0){
+                if(e.data.AxisLeftX > axisThreshold){
+                    stickTicks.right++;
+                };
+                if(e.data.AxisLeftX < -axisThreshold){
+                    stickTicks.left++;
+                };
+            }else{
+                stickTicks.right = 0;
+                stickTicks.left = 0;
+            }
+            if(e.data.AxisLeftY != 0){
+                if(e.data.AxisLeftY > axisThreshold){
+                    stickTicks.up++;
+                };
+                if(e.data.AxisLeftY < -axisThreshold){
+                    stickTicks.down++;
+                };
+            }else{
+                stickTicks.up = 0;
+                stickTicks.down = 0;               
+            }
+        }
+    });
+    var clicking = false;
+    var currentPos = {x: null, y: null};
+    $('#playerWindow').mousedown(function(){
+        clicking = true;
+    });
+    $(document).mouseup(function(){
+        clicking = false;
+    })
+    $('#playerWindow').mousemove(function(event){
+        if(clicking){
+            currentPos.x = event.clientX;
+            currentPos.y = event.clientY;
+            var xDiff = (currentPos.x + 90);
+            //console.log(xDiff);
+            dew.command('Player.Armor.SetUiModelRotation ' + xDiff);
         }
     });
 });
 
+function checkGamepad(){
+    var shouldUpdateHeld = false;
+    if(Date.now() - lastHeldUpdated > 100) {
+        shouldUpdateHeld = true;
+        lastHeldUpdated = Date.now();
+    }
+    if(stickTicks.up == 1 || (shouldUpdateHeld && stickTicks.up > 25)){
+        upNav();
+    }
+    if(stickTicks.down == 1 || (shouldUpdateHeld && stickTicks.down > 25)){
+        downNav();
+    }
+    if(stickTicks.left == 1 || (shouldUpdateHeld && stickTicks.left > 25)){
+        leftToggle();
+    }
+    if(stickTicks.right == 1 || (shouldUpdateHeld && stickTicks.right > 25)){
+        rightToggle();
+    }
+};
+
 function setButtons(){
-    dew.command('Game.IconSet', {}).then(function(response) {
+    dew.command('Game.IconSet', {}).then(function(response){
         $('#randomArmor img').attr('src','dew://assets/buttons/' + response + '_X.png');
         $('#randomColors img').attr('src','dew://assets/buttons/' + response + '_Y.png');
         $('#applyButton img').attr('src','dew://assets/buttons/' + response + '_Start.png');
@@ -527,7 +597,9 @@ function setButtons(){
     });
 }
 
+var bipedRotate = 270;
 dew.on('show', function(e){
+    bipedRotate = 270;
     dew.getSessionInfo().then(function(i){
         if(i.established){
             if(i.mapName != "mainmenu"){
@@ -556,22 +628,41 @@ dew.on('show', function(e){
         if(result == 1){
             onControllerConnect();
             hasGP = true;
+            repGP = window.setInterval(checkGamepad,1000/60);
         }else{
             onControllerDisconnect();
             hasGP = false;
+            if(repGP){
+                window.clearInterval(repGP);
+            }
         }
     });
+    dew.command('game.hideh3ui 1');
 });
 
 dew.on('hide', function(e){
     dew.command('Player.Armor.SetUiModelPosition -0.398312 -13.5218 25.5292');
+    dew.command('Player.Armor.SetUiModelRotation 270');
+    dew.command('game.hideh3ui 0');
+    if(repGP){
+        window.clearInterval(repGP);
+    }
 });
+
+function rotateBiped(direction){
+    if(direction == "right"){
+        bipedRotate++;
+    }else{
+        bipedRotate--;
+    }
+    dew.command('Player.Armor.SetUiModelRotation '+bipedRotate);
+}
 
 function initActive(){
     tabIndex = 0;
     $('.selected').removeClass('selected');
     $('.tabs li:visible').eq(0).addClass('selected');
-    window.location.replace($('.tabs li:visible').eq(0).find('a')[0].hash);
+    location.hash = $('.selected a')[0].hash;
     activePage = window.location.hash;
 }
 
@@ -636,6 +727,7 @@ function adjustBiped(){
 }
 
 function switchPage(pageHash){
+    itemNumber = 0;
     location.href=pageHash;
     activePage=pageHash;    
     if(hasGP){
