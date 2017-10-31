@@ -8,7 +8,6 @@
 #include "Patches\Scoreboard.hpp"
 #include "Patches\Ui.hpp"
 #include "Patches\VirtualKeyboard.hpp"
-#include "Patches\Armor.hpp"
 #include "Patches\RawInput.hpp"
 #include "Patches\ContentItems.hpp"
 #include "Patches\PlayerUid.hpp"
@@ -26,8 +25,12 @@
 #include "Patches\Weapon.hpp"
 #include "Patches\Spectate.hpp"
 #include "Patches\Tweaks.hpp"
-#include "DirectXHook.hpp"
-
+#include "Patches\DirectXHook.hpp"
+#include "Patches\Medals.hpp"
+#include "Patches\Simulation.hpp"
+#include "Patches\Camera.hpp"
+#include "Patches\Maps.hpp"
+#include "Game\Armor.hpp"
 
 namespace
 {
@@ -48,7 +51,6 @@ namespace Patches
 		Scoreboard::ApplyAll();
 		Ui::ApplyAll();
 		VirtualKeyboard::ApplyAll();
-		Armor::ApplyAll();
 		RawInput::ApplyAll();
 		ContentItems::ApplyAll();
 		PlayerUid::ApplyAll();
@@ -59,9 +61,16 @@ namespace Patches
 		Events::ApplyAll();
 		LoadingScreen::ApplyAll();
 		Equipment::ApplyAll();
-		PlayerRepresentation::ApplyAll();
 		Weapon::ApplyAll();
 		Spectate::ApplyAll();
+		Medals::ApplyAll();
+		Simulation::ApplyAll();
+		Camera::ApplyAll();
+		Maps::ApplyAll();
+
+		Network::PlayerPropertiesExtender::Instance().Add(std::make_shared<Game::Armor::ArmorExtension>());
+
+		PlayerRepresentation::ApplyAll();
 
 		//Since these patches are happening before ED gets initalized, we dont know if we are in dedi mode or not.
 		bool isdedicated = false;
@@ -75,20 +84,19 @@ namespace Patches
 		}
 
 		if (!isdedicated)
-			DirectXHook::applyPatches();
+			DirectXHook::ApplyAll();
 	}
 
 	void ApplyOnFirstTick()
 	{
-		Ui::ApplyMapNameFixes();
 	}
 
 	void ApplyAfterTagsLoaded()
 	{
-		Armor::ApplyAfterTagsLoaded();
-		Armor::RefreshUiPlayer();
+		Game::Armor::LoadArmorPermutations();
+		Game::Armor::RefreshUiPlayer();
+		Ui::ApplyAfterTagsLoaded(); //No UI calls interacting with tags before this!
 		Ui::ApplyUIResolution();
-		Ui::ApplyAfterTagsLoaded();
 		Weapon::ApplyAfterTagsLoaded();
 		Tweaks::ApplyAfterTagsLoaded();
 	}
@@ -97,7 +105,6 @@ namespace Patches
 	{
 		Sprint::Tick();
 		Forge::Tick();
-		Spectate::Tick();
 
 		static bool appliedFirstTickPatches = false;
 		if (appliedFirstTickPatches)

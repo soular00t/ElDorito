@@ -34,6 +34,12 @@ namespace
 		return true;
 	}
 
+	bool CommandDeselectAllOf(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		Forge::Selection::DeselectAllOf();
+		return true;
+	}
+
 	bool CommandSelectAll(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		Forge::Selection::SelectAll();
@@ -181,7 +187,7 @@ namespace
 
 			
 				if (!(engineFlags & 0x3FF) || engineFlags == 0x3FF ||
-					mapv->Unknown11C != 10 && uint16_t(1 << mapv->Unknown11C) & engineFlags)
+					mapv->ContentType != 10 && uint16_t(1 << mapv->ContentType) & engineFlags)
 				{
 					const char* asciiName = UI_GetString(0x1221, item.Name, lanquageId);
 					char tagIndexStr[8];
@@ -237,6 +243,12 @@ namespace
 		Patches::Forge::SpawnItem(tagIndex);
 		return true;
 	}
+
+	bool CommandPrematchCamera(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		Patches::Forge::SetPrematchCamera();
+		return true;
+	}
 }
 
 namespace Modules
@@ -257,16 +269,24 @@ namespace Modules
 		VarMagnetsVisible = AddVariableInt("MagnetsVisible", "forge_magnets_visible", "Controls whether magnets are shown (1) or hidden (0)", eCommandFlagsArchived, 1);
 		VarMagnetsVisible->ValueIntMin = 0;
 		VarMagnetsVisible->ValueIntMax = 1;
+		VarMaxGrabDistance = AddVariableFloat("GrabDistance", "forge_grab_distance", "Controls the maximum distance from which objects can be grabbed", eCommandFlagsArchived, 5.0f);
+		VarMagnetsStrength = AddVariableFloat("MagnetsStrength", "forge_magnets_strength", "Controls the minimum distance at which magnets snap", eCommandFlagsArchived, 0.3f);
+		VarShowInvisibles = AddVariableInt("ShowInvisibles", "forge_show_invisibles", "When enabled forces invisible materials to be visible", eCommandFlagsNone, 0.0f);
+		VarShowInvisibles->ValueIntMin = 0;
+		VarShowInvisibles->ValueIntMax = 1;
 
 		AddCommand("DeleteAll", "forge_delete_all", "Delete all objects that are the same as the object under the crosshair", eCommandFlagsHostOnly, CommandDeleteAll);
 		AddCommand("Canvas", "forge_canvas", "Delete all objects on the map", eCommandFlagsHostOnly, CommandCanvas);
 		AddCommand("SelectAll", "forge_select_all", "Select all objects that are the same as the object under the crosshair", eCommandFlagsNone, CommandSelectAll);
 		AddCommand("DeselectAll", "forge_deselect_all", "Deselect all selected objects", eCommandFlagsNone, CommandDeselectAll);
+		AddCommand("DeselectAllOf", "forge_deselect_all_of", "Deselect all selected objects that are the same as the object under the crosshair", eCommandFlagsNone, CommandDeselectAllOf);
 		AddCommand("SavePrefab", "forge_prefab_save", "Save prefab to a file", eCommandFlagsNone, CommandSavePrefab);
 		AddCommand("LoadPrefab", "forge_prefab_load", "Load prefab from a file", eCommandFlagsNone, CommandLoadPrefab);
 		AddCommand("DumpPrefabs", "forge_prefab_dump", "Dump a list of saved prefabs in json", eCommandFlagsNone, CommandDumpPrefabs);
 
 		AddCommand("DumpPalette", "forge_dump_palette", "Dumps the forge palette in json", eCommandFlagsNone, CommandDumpPalette);
 		AddCommand("SpawnItem", "forge_spawn", "Spawn an item from the forge palette", eCommandFlagsNone, CommandSpawnItem);
+
+		AddCommand("SetPrematchCamera", "forge_set_prematch_camera", "Set the position/orientation of the prematch camera", eCommandFlagsHostOnly, CommandPrematchCamera);
 	}
 }

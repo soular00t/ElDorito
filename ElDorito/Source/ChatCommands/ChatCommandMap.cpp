@@ -17,7 +17,6 @@ namespace ChatCommands
 {
 	std::vector<AbstractChatCommand *> Commands;
 	bool chatCommandsActive; // they are only allowed in-game, not in the lobby
-	std::vector<std::string> helpText = std::vector <std::string> {};
 	std::map<uint64_t, time_t> voteTimes = std::map<uint64_t, time_t>{};
 
 	KickPlayerCommand kickPlayerCommand;
@@ -69,13 +68,6 @@ namespace ChatCommands
 		Commands.push_back((AbstractChatCommand*) &endGameCommand);
 		Commands.push_back((AbstractChatCommand*) &shuffleTeamsCommand);
 
-		for (auto elem : Commands)
-		{
-			if (elem->isEnabled())
-				helpText.push_back("!" +elem->getName() + " - " + elem->getDescription());
-		}
-		//manually add this one since its not a voting command
-		helpText.push_back("!listPlayers - Lists the Index and Name of each player in the session. ");
 	}
 
 	bool addToVoteTimes(uint64_t sender)
@@ -110,6 +102,17 @@ namespace ChatCommands
 
 	std::vector<std::string> getHelpText()
 	{
+		std::vector<std::string> helpText = std::vector <std::string>{};
+		if (chatCommandsActive)
+		{
+			for (auto elem : Commands)
+			{
+				if (elem->isEnabled())
+					helpText.push_back("!" + elem->getName() + " - " + elem->getDescription());
+			}
+
+		}
+		helpText.push_back("!listPlayers - Lists the Index and Name of each player in the session. ");
 		return helpText;
 	}
 
@@ -153,10 +156,7 @@ namespace ChatCommands
 		}
 
 		//If the voting commands are not active at the moment, don't do anything.
-		if (!chatCommandsActive)
-		{
-			return false;
-		}
+		
 
 
 		for (auto elem : Commands)
@@ -181,6 +181,11 @@ namespace ChatCommands
 
 			if (cmd == (name))
 			{
+				if (!chatCommandsActive)
+				{
+					Server::Chat::SendServerMessage("This command is not currently active.", peer);
+					return true;
+				}
 				//Now that we know this is the command being invoked, lets prep the argument (if there is one) and pass it in
 				std::vector<std::string> argsVect;
 				for (int i = 1; i < numArgs; i++)

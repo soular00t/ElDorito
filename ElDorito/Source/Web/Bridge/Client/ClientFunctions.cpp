@@ -2,11 +2,15 @@
 #include "ClientFunctions.hpp"
 #include "../../Ui/ScreenLayer.hpp"
 #include "../../Ui/WebVirtualKeyboard.hpp"
+#include "../../Ui/WebForge.hpp"
 #include "../../Ui/WebScoreboard.hpp"
 #include "../../../CommandMap.hpp"
 #include "../../../Blam/BlamNetwork.hpp"
 #include "../../../Patches/Network.hpp"
 #include "../../../Patches/Input.hpp"
+#include "../../../Patches/Ui.hpp"
+#include "../../../Modules/ModuleVoIP.hpp"
+#include "../../../Modules/ModulePlayer.hpp"
 #include "../../../Pointer.hpp"
 #include "../../../Server/ServerChat.hpp"
 #include "../../../Utils/VersionInfo.hpp"
@@ -60,15 +64,17 @@ namespace Anvil::Client::Rendering::Bridge::ClientFunctions
 	{
 		// Get the "address" argument
 		auto s_AddressValue = p_Args.FindMember("address");
-		if (s_AddressValue == p_Args.MemberEnd() || !s_AddressValue->value.IsString())
+		auto s_port = p_Args.FindMember("port");
+
+		if (s_AddressValue == p_Args.MemberEnd() || !s_AddressValue->value.IsString() || s_port == p_Args.MemberEnd() || !s_port->value.IsInt())
 		{
-			*p_Result = "Bad query: An \"address\" argument is required and must be a string";
+			*p_Result = "Bad query: The \"address\" argument must be a string and the \"port\" argument must be an int";
 			return QueryError_BadQuery;
 		}
 
 		// Parse it
 		Blam::Network::NetworkAddress blamAddress;
-		if (!Blam::Network::NetworkAddress::Parse(s_AddressValue->value.GetString(), 11774, &blamAddress))
+		if (!Blam::Network::NetworkAddress::Parse(s_AddressValue->value.GetString(), s_port->value.GetInt(), &blamAddress))
 		{
 			*p_Result = "Invalid argument: The \"address\" argument is not a valid IP address.";
 			return QueryError_InvalidArgument;
@@ -95,14 +101,21 @@ namespace Anvil::Client::Rendering::Bridge::ClientFunctions
 	{
 		// Get the "capture" argument
 		auto s_CaptureValue = p_Args.FindMember("capture");
+		auto s_CapturePointerValue = p_Args.FindMember("capturePointer");
+		bool capturePointer = false;
 		if (s_CaptureValue == p_Args.MemberEnd() || !s_CaptureValue->value.IsBool())
 		{
 			*p_Result = "Bad query: A \"capture\" argument is required and must be a boolean";
 			return QueryError_BadQuery;
 		}
 
+		if (s_CapturePointerValue != p_Args.MemberEnd() && s_CapturePointerValue->value.IsBool())
+		{
+			capturePointer = s_CapturePointerValue->value.GetBool();
+		}
+
 		// Toggle input capture
-		Web::Ui::ScreenLayer::CaptureInput(s_CaptureValue->value.GetBool());
+		Web::Ui::ScreenLayer::CaptureInput(s_CaptureValue->value.GetBool(), capturePointer);
 		return QueryError_Ok;
 	}
 
@@ -368,6 +381,14 @@ namespace Anvil::Client::Rendering::Bridge::ClientFunctions
 
 			writer.Key("isHost");
 			writer.Bool(false);
+
+			writer.Key("playerInfo");
+			writer.StartObject();
+			writer.Key("Name");
+			writer.String("");
+			writer.Key("Uid");
+			writer.String("");
+			writer.EndObject();
 		}
 		else
 		{
@@ -379,6 +400,16 @@ namespace Anvil::Client::Rendering::Bridge::ClientFunctions
 
 			writer.Key("isHost");
 			writer.Bool(session->IsHost());
+
+			writer.Key("playerInfo");
+			writer.StartObject();
+			writer.Key("Name");
+			writer.String(Utils::String::ThinString(session->MembershipInfo.GetLocalPlayerSession().Properties.DisplayName).c_str());
+			writer.Key("Uid");
+			char uid[17];
+			Blam::Players::FormatUid(uid, session->MembershipInfo.GetLocalPlayerSession().Properties.Uid);
+			writer.String(uid);
+			writer.EndObject();
 		}
 		writer.Key("mapName");
 		writer.String((char*)Pointer(0x22AB018)(0x1A4));
@@ -530,6 +561,93 @@ namespace Anvil::Client::Rendering::Bridge::ClientFunctions
 			*p_Result = "Bad query : \"key\" argument was out of bounds.";
 			return QueryError_BadQuery;
 		}
+		return QueryError_Ok;
+	}
+
+	QueryError OnVoIPSpeakingChanged(const rapidjson::Value &p_Args, std::string *p_Result)
+	{
+		auto value = p_Args.FindMember("value");
+		if (value == p_Args.MemberEnd() || !value->value.IsBool())
+		{
+			*p_Result = "Bad query : A \"value\" argument is required and must be a bool";
+			return QueryError_BadQuery;
+		}
+
+		Modules::ModuleVoIP::Instance().voiceDetected = value->value.GetBool();
+
+		if (Modules::ModuleVoIP::Instance().VarSpeakingPlayerOnHUD->ValueInt == 1)
+		{
+			Patches::Ui::ToggleSpeakingPlayerName(Modules::ModulePlayer::Instance().VarPlayerName->ValueString , value->value.GetBool());
+		}
+
+		return QueryError_Ok;
+	}
+
+	QueryError OnVoIPConnectedChanged(const rapidjson::Value &p_Args, std::string *p_Result)
+	{
+		auto value = p_Args.FindMember("value");
+		if (value == p_Args.MemberEnd() || !value->value.IsBool())
+		{
+			*p_Result = "Bad query : A \"value\" argument is required and must be a bool";
+			return QueryError_BadQuery;
+		}
+
+		Modules::ModuleVoIP::Instance().voipConnected = value->value.GetBool();
+
+		return QueryError_Ok;
+	}
+
+	QueryError OnVoIPPlayerSpeakingChanged(const rapidjson::Value &p_Args, std::string *p_Result)
+	{
+		auto name = p_Args.FindMember("name");
+		auto value = p_Args.FindMember("value");
+		if (name == p_Args.MemberEnd() || !name->value.IsString())
+		{
+			*p_Result = "Bad query : A \"name\" argument is required and must be a string";
+			return QueryError_BadQuery;
+		}
+		else if (value == p_Args.MemberEnd() || !value->value.IsBool())
+		{
+			*p_Result = "Bad query : A \"value\" argument is required and must be a bool";
+			return QueryError_BadQuery;
+		}
+
+		if (Modules::ModuleVoIP::Instance().VarSpeakingPlayerOnHUD->ValueInt == 1)
+			Patches::Ui::ToggleSpeakingPlayerName(name->value.GetString(), value->value.GetBool());
+		else
+		{
+			if(!value->value.GetBool()) //If we only want to render web, allow us to remove names still
+				Patches::Ui::ToggleSpeakingPlayerName(name->value.GetString(), value->value.GetBool());
+		}
+
+		return QueryError_Ok;
+	}
+
+	QueryError OnIsMapLoading(const rapidjson::Value &p_Args, std::string *p_Result)
+	{
+		static auto IsMapLoading = (bool(*)())(0x005670E0);
+
+		rapidjson::StringBuffer buffer;
+		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+		writer.StartObject();
+
+		writer.Key("loading");
+		writer.Bool(IsMapLoading());
+		writer.EndObject();
+
+		*p_Result = buffer.GetString();
+		return QueryError_Ok;
+	}
+
+	QueryError OnForgeAction(const rapidjson::Value &p_Args, std::string *p_Result)
+	{
+		Web::Ui::WebForge::ProcessAction(p_Args, p_Result);
+		return QueryError_Ok;
+	}
+	
+	QueryError OnShowLan(const rapidjson::Value &p_Args, std::string *p_Result)
+	{
+		Patches::Ui::ShowLanBrowser();
 		return QueryError_Ok;
 	}
 }

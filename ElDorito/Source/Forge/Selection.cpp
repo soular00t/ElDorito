@@ -26,11 +26,21 @@ namespace Forge
 		return !s_SelectedObjects.Any();
 	}
 
+	uint32_t GetCurrentObjectIndex(uint32_t playerIndex)
+	{
+		uint32_t heldObjectIndex, crosshairObjectIndex;
+		if (!Forge::GetEditorModeState(playerIndex, &heldObjectIndex, &crosshairObjectIndex))
+			return -1;
+
+		return heldObjectIndex != -1 ? heldObjectIndex : crosshairObjectIndex;
+	}
+
 	void Selection::SelectAll()
 	{
 		auto playerIndex = Blam::Players::GetLocalPlayer(0);
-		auto objectUnderCrosshair = Blam::Objects::Get(GetSandboxGlobals().CrosshairObjects[playerIndex.Index()]);
-		if (!objectUnderCrosshair)
+
+		auto currentObject = Blam::Objects::Get(GetCurrentObjectIndex(playerIndex));
+		if (!currentObject)
 			return;
 
 		const auto mapv = GetMapVariant();
@@ -41,8 +51,29 @@ namespace Forge
 			if (placement.ObjectIndex == -1 || placement.BudgetIndex == -1)
 				continue;
 
-			if (mapv->Budget[placement.BudgetIndex].TagIndex == objectUnderCrosshair->TagIndex)
+			if (mapv->Budget[placement.BudgetIndex].TagIndex == currentObject->TagIndex)
 				s_SelectedObjects.Add(placement.ObjectIndex);
+		}
+	}
+
+	void Selection::DeselectAllOf()
+	{
+		auto playerIndex = Blam::Players::GetLocalPlayer(0);
+
+		auto currentObject = Blam::Objects::Get(GetCurrentObjectIndex(playerIndex));
+		if (!currentObject)
+			return;
+
+		const auto mapv = GetMapVariant();
+
+		for (auto i = 0; i < 640; i++)
+		{
+			auto& placement = mapv->Placements[i];
+			if (placement.ObjectIndex == -1 || placement.BudgetIndex == -1)
+				continue;
+
+			if (mapv->Budget[placement.BudgetIndex].TagIndex == currentObject->TagIndex)
+				s_SelectedObjects.Remove(placement.ObjectIndex);
 		}
 	}
 
@@ -146,22 +177,28 @@ namespace Forge
 		static bool s_IsPaintSelecting = false;
 
 		auto playerIndex = Blam::Players::GetLocalPlayer(0);
-		auto objectIndexUnderCrosshair = Forge::GetSandboxGlobals().CrosshairObjects[playerIndex.Index()];
+
+		uint32_t heldObjectIndex, crosshairObjectIndex;
+		if (!Forge::GetEditorModeState(playerIndex, &heldObjectIndex, &crosshairObjectIndex))
+			return;
 
 		auto fireRight = GetActionState(eGameActionFireRight);
 
+		if (heldObjectIndex != -1)
+			return;
+
 		if (!(fireRight->Flags & eActionStateFlagsHandled) && fireRight->Ticks > 0)
 		{
-			if (fireRight->Ticks == 1 && objectIndexUnderCrosshair == -1)
+			if (fireRight->Ticks == 1 && crosshairObjectIndex == -1)
 				s_IsPaintSelecting = true;
 
-			if (objectIndexUnderCrosshair != -1 && (fireRight->Ticks == 1 || s_IsPaintSelecting))
+			if (crosshairObjectIndex != -1 && (fireRight->Ticks == 1 || s_IsPaintSelecting))
 			{
 				auto& selection = Forge::Selection::GetSelection();
-				if (selection.Contains(objectIndexUnderCrosshair) && !s_IsPaintSelecting)
-					selection.Remove(objectIndexUnderCrosshair);
+				if (selection.Contains(crosshairObjectIndex) && !s_IsPaintSelecting)
+					selection.Remove(crosshairObjectIndex);
 				else
-					selection.Add(objectIndexUnderCrosshair);
+					selection.Add(crosshairObjectIndex);
 			}
 		}
 		else

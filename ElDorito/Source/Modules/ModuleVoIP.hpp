@@ -12,6 +12,12 @@ namespace Modules
 		Command* VarEchoCancellation;
 		Command* VarAGC;
 		Command* VarNoiseSupress;
+		Command* VarPTTSoundEnabled;
+		Command* VarSpeakingPlayerOnHUD;
+		Command* VarStereoVoice;
+
+		bool voipConnected = false;
+		bool voiceDetected = false;
 
 		ModuleVoIP();
 	};

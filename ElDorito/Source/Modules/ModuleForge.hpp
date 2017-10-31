@@ -15,6 +15,9 @@ namespace Modules
 		Command* VarSelectionRenderer;
 		Command* VarMagnetsEnabled;
 		Command* VarMagnetsVisible;
+		Command* VarMaxGrabDistance;
+		Command* VarMagnetsStrength;
+		Command* VarShowInvisibles;
 
 		ModuleForge();
 	};

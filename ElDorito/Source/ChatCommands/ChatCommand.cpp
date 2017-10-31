@@ -48,14 +48,22 @@ namespace ChatCommands
 		Server::Chat::SendServerMessage("Vote started to shuffle the teams. " + std::to_string(votesNeeded) + " votes needed to pass. Type !yes to vote");
 	}
 
-	bool ShuffleTeamsCommand::isValidArgument(std::string s, std::string& returnInfo){ return true; }
+	bool ShuffleTeamsCommand::isValidArgument(std::string s, std::string& returnInfo)
+	{ 
+		if (Blam::Network::GetActiveSession()->HasTeams())
+			return true; 
+		else {
+			returnInfo = "Only team games can be shuffled.";
+			return false;
+		}
+	}
 
 	EndGameCommand::EndGameCommand() : AbstractChatCommand("endGame", "Starts a vote to end the current game. Type !yes to vote."){}
 
 	void EndGameCommand::doOnVotePass()
 	{
 		Server::Chat::SendServerMessage("Vote Has Passed");
-		Modules::CommandMap::Instance().ExecuteCommand("game.stop");
+		Modules::CommandMap::Instance().ExecuteCommand("game.end");
 	}
 	bool EndGameCommand::isEnabled()
 	{

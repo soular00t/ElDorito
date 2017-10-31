@@ -18,16 +18,18 @@ namespace Patches::Weapon
 	Blam::Math::RealVector3D GetOffsetByIndex(bool isDefault, uint16_t &weaponIndex);
 	Blam::Math::RealVector3D GetOffsetByName(bool isDefault, std::string &weaponName);
 
-	void SetOffsetModified(std::string &weaponName, Blam::Math::RealVector3D &weaponOffset);
+	void SetDefaultOffsets();
+	bool SetOffsetModified(std::string &weaponName, Blam::Math::RealVector3D &weaponOffset);
 
 	void ApplyOffsetByIndex(uint16_t &weaponIndex, Blam::Math::RealVector3D &weaponOffset);
 	void ApplyOffsetByName(std::string &weaponName, Blam::Math::RealVector3D &weaponOffset);
 
-	bool IsOffsetModified(const std::string &weapon);
+	bool IsOffsetModified(const std::string &weaponName);
 
 	namespace Config
 	{
-		bool LoadJSON(std::string JSONPath);
-		bool SaveJSON(std::string JSONPath);
+		bool CreateList();
+		bool LoadJSON(std::string Name);
+		bool SaveJSON(std::string Name);
 	}
 }

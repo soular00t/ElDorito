@@ -17,7 +17,6 @@ namespace Blam::Players
 			Secondary,
 			Visor,
 			Lights,
-			Holo,
 
 			Count
 		};
@@ -30,11 +29,8 @@ namespace Blam::Players
 		{
 			Helmet = 0,
 			Chest,
-			Shoulders,
-			Arms,
-			Legs,
-			Acc,
-			Pelvis,
+			RightShoulder,
+			LeftShoulder,
 
 			Count
 		};
@@ -44,7 +40,11 @@ namespace Blam::Players
 	struct PlayerCustomization
 	{
 		uint32_t Colors[ColorIndices::Count];
+		uint32_t : 32;
 		uint8_t Armor[ArmorIndices::Count];
+		uint8_t : 8;
+		uint8_t : 8;
+		uint8_t : 8;
 		uint32_t Unknown1C;
 	};
 	static_assert(sizeof(PlayerCustomization) == 0x20, "Invalid PlayerCustomization size");
@@ -86,10 +86,14 @@ namespace Blam::Players
 		wchar_t DisplayName[16];
 		int TeamIndex;
 		uint32_t Unknown5C;
-		uint8_t Unknown60;
+		uint8_t Gender;
 		uint8_t PlayerRepresentation;
 		uint16_t Unknown62;
-		uint8_t Unknown64[0x664];
+		uint8_t Unknown64[1616];
+		wchar_t ServiceTag[6];
+		uint16_t Unknown6C0;
+		uint16_t Unknown6C2;
+		uint16_t Unknown6C6;
 		PlayerCustomization Customization;
 		uint8_t Unknown6E4[0xF38];
 	};
@@ -179,4 +183,6 @@ namespace Blam::Players
 	PLAYER_STATS GetStats(int playerIndex);
 
 	PLAYER_KILLED_PLAYER_STATS GetPVPStats(int playerIndex);
+
+	void FormatUid(char* out, int64_t Uid);
 }

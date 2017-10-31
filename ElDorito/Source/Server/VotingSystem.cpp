@@ -46,25 +46,27 @@ namespace Server::Voting
 	};
 
 	//These are just some default gametypes that get loaded if the user doesnt specify any
-	const std::string DefaultTypes[7] =
+	const std::string DefaultTypes[8] =
 	{
 		"slayer",
-		"team_slayer",
-		"team_swat",
-		"ctf",
-		"odd_ball",
-		"odd_ball_ffa",
-		"koth",
+		"team slayer",
+		"multi flag",
+		"team oddball",
+		"oddball",
+		"crazy king",
+		"team king",
+		"assault",
 	};
-	const std::string DefaultTypeNames[7] =
+	const std::string DefaultTypeNames[8] =
 	{
 		"Slayer",
 		"Team Slayer",
-		"Team Swat",
-		"CTF",
-		"Oddball",
+		"Multi Flag",
+		"Team Oddball",
 		"FFA Oddball",
 		"Crazy King",
+		"Team King",
+		"Assault",
 	};
 
 	int numberOfPlayersInGame()
@@ -115,14 +117,14 @@ namespace Server::Voting
 	bool VotingSystem::isEnabled() {
 		return Modules::ModuleServer::Instance().VarServerVotingEnabled->ValueInt == 1;
 	}
-	void VotingSystem::Init()
-	{
-		if (!LoadJson((ElDorito::Instance().GetInstanceName() != "") ? "mods/server/voting_" + ElDorito::Instance().GetInstanceName() + ".json" : "mods/server/voting.json"))
+	
+
+	void VotingSystem::Init() {
+		if (!LoadJson(Modules::ModuleServer::Instance().VarVotingJsonPath->ValueString))
 			loadDefaultMapsAndTypes();
 	}
-	void VetoSystem::Init()
-	{
-		if (!LoadJson((ElDorito::Instance().GetInstanceName() != "") ? "mods/server/veto_" + ElDorito::Instance().GetInstanceName() + ".json" : "mods/server/veto.json"))
+	void VetoSystem::Init() {
+		if (!LoadJson(Modules::ModuleServer::Instance().VarVetoJsonPath->ValueString))
 			loadDefaultMapsAndTypes();
 	}
 
@@ -271,7 +273,7 @@ namespace Server::Voting
 	void AbstractVotingSystem::GenerateVotingOptionsMessage(int peer)
 	{
 		auto* session = Blam::Network::GetActiveSession();
-		if (!(session && session->IsEstablished() && session->IsHost() && Modules::ModuleServer::Instance().VarServerVotingEnabled->ValueInt))
+		if (!(session && session->IsEstablished() && session->IsHost() && session->Parameters.GetSessionMode() == 1 && isEnabled()))
 			return;
 
 		VotingMessage newmessage = GenerateVotingOptionsMessage();
@@ -395,10 +397,9 @@ namespace Server::Voting
 			if (numberOfPlayersInGame() > 0)
 			{
 				idle = false;
-				//only start voting if we are in the lobby. Sometimes everyone will leave a game in progress, causing it to go idle, then someone will join before it gets back to the lobby.
-				std::string mapName((char*)Pointer(0x22AB018)(0x1A4));
-				if (mapName == "mainmenu")
+				if (Blam::Network::GetActiveSession()->Parameters.GetSessionMode() == 1)
 					StartVoting();
+
 			}
 
 			return;
@@ -468,7 +469,10 @@ namespace Server::Voting
 		if (!document.Parse<0>(contents.c_str()).HasParseError() && document.IsObject())
 		{
 			if (!document.HasMember("Types") || !document.HasMember("Maps"))
+			{
+				Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Error, "Json must contain 'Maps' and 'Types' arrays. Using defaults instead");
 				return false;
+			}
 
 			const rapidjson::Value& maps = document["Maps"];
 			// rapidjson uses SizeType instead of size_t :/
@@ -538,9 +542,16 @@ namespace Server::Voting
 
 			}
 		}
-
-		if (gameTypes.size() < 2 || haloMaps.size() < 2)
+		else
+		{
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Error, "Could not parse voting json. Using defaults instead");
 			return false;
+		}
+		if (gameTypes.size() < 2 || haloMaps.size() < 2)
+		{
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Error, "Json must contain at least 2 gametypes and two maps. Using defaults instead.");
+			return false;
+		}
 
 
 		return true;
@@ -571,7 +582,7 @@ namespace Server::Voting
 		numberOfVetosUsed++;
 		currentVetoOption = GenerateVotingOption();
 		currentVetoOption.canveto = true;
-
+		SetGameAndMap();
 		auto message = GenerateVotingOptionsMessage();
 		BroadcastVotingMessage(message);
 
@@ -596,14 +607,15 @@ namespace Server::Voting
 		}
 		else {
 			currentVetoOption.canveto = false;
-			SetGameAndMapAndStartTimer();
+			SetGameAndMap();
+			SetStartTimer();
 		}
 
 		voteStartedTime = 0;
 		mapVotes.clear();
 	}
 
-	void VetoSystem::SetGameAndMapAndStartTimer()
+	void VetoSystem::SetGameAndMap()
 	{
 		Modules::CommandMap::Instance().ExecuteCommand("Game.GameType \"" + currentVetoOption.haloType.typeName + "\"");
 		Modules::CommandMap::Instance().ExecuteCommand("Game.Map \"" + currentVetoOption.haloMap.mapName + "\"");
@@ -612,6 +624,10 @@ namespace Server::Voting
 			Modules::CommandMap::Instance().ExecuteCommand(command);
 		}
 
+	}
+
+	void VetoSystem::SetStartTimer()
+	{
 		auto message = GenerateVotingOptionsMessage();
 		BroadcastVotingMessage(message);
 		time(&startime);
@@ -637,7 +653,11 @@ namespace Server::Voting
 		if (!document.Parse<0>(contents.c_str()).HasParseError() && document.IsObject())
 		{
 			if (!document.HasMember("playlist"))
+			{
+				Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Error, "Json does not contain an array named 'playlist'. Using default maps and gametypes. ");
 				return false;
+			}
+				
 
 			const rapidjson::Value& mapAndTypes = document["playlist"];
 			// rapidjson uses SizeType instead of size_t :/
@@ -680,9 +700,18 @@ namespace Server::Voting
 				entirePlaylist.push_back(MapAndType(m, t));
 			}
 		}
+		else
+		{
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Error, "Json is formatted incorrectly. Using default maps and gametypes. ");
+			return false;
+		}
 
 		if (entirePlaylist.size() < 1)
+		{
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Error, "No items in playlist array. Using default maps and gametypes. ");
 			return false;
+		}
+			
 
 		currentPlaylist = entirePlaylist;
 		return true;
@@ -704,9 +733,7 @@ namespace Server::Voting
 			if (numberOfPlayersInGame() > 0)
 			{
 				idle = false;
-				//only start voting if we are in the lobby. Sometimes everyone will leave a game in progress, causing it to go idle, then someone will join before it gets back to the lobby.
-				std::string mapName((char*)Pointer(0x22AB018)(0x1A4));
-				if (mapName == "mainmenu" && Patches::Network::IsInfoSocketOpen())
+				if (Blam::Network::GetActiveSession()->Parameters.GetSessionMode() == 1)
 					NewVote();
 			}
 
@@ -794,7 +821,8 @@ namespace Server::Voting
 			//we want to send a voting option that can not be voted on, and then start the game.
 			currentVetoOption = GenerateVotingOption();
 			currentVetoOption.canveto = false;
-			SetGameAndMapAndStartTimer();
+			SetGameAndMap();
+			SetStartTimer();
 		}
 	}
 

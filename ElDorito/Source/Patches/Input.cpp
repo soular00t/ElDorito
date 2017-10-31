@@ -7,6 +7,7 @@
 #include "../Blam/BlamInput.hpp"
 #include "../Blam/BlamObjects.hpp"
 #include "../Blam/BlamPlayers.hpp"
+#include "../Blam/BlamTime.hpp"
 #include "../Modules/ModuleInput.hpp"
 #include "../Console.hpp"
 #include "../ElDorito.hpp"
@@ -29,8 +30,10 @@ namespace
 	void ProcessMouseBindingsHook(const BindingsTable &bindings, ActionState *actions);
 	void UpdateUiControllerInputHook(int a0);
 	char GetControllerStateHook(int dwUserIndex, int a2, void *a3);
-	DWORD SetControllerVibrationHook(int dwUserIndex, int a2, char a3);
+	DWORD SetControllerStateHook(int dwUserIndex, int motorSpeed, char disable);
+	void SetControllerVibrationHook(int controllerIndex, uint16_t leftMotorSpeed, uint16_t rightMotorSpeed);
 	void LocalPlayerInputHook(int localPlayerIndex, uint32_t playerIndex, int a3, int a4, int a5, uint8_t* state);
+	void null_stub() {};
 
 	// Block/unblock input without acquiring or de-acquiring the mouse
 	void QuickBlockInput();
@@ -48,6 +51,7 @@ namespace
 	bool queuedGameAction[eGameAction_KeyboardMouseCount] = {};
 
 	BindingsTable s_ForgeMonitorModeBindings;
+	int32_t s_ControllerVibrationTestTicks = 0;
 }
 
 namespace Patches::Input
@@ -64,7 +68,9 @@ namespace Patches::Input
 		Hook(0x20C040, GetDefaultBindingsHook).Apply();
 		Hook(0x20C4F6, GetKeyboardActionTypeHook).Apply();
 		Hook(0x1128FB, GetControllerStateHook, HookFlags::IsCall).Apply();
-		Hook(0x11298B, SetControllerVibrationHook, HookFlags::IsCall).Apply();
+		Hook(0x11298B, SetControllerStateHook, HookFlags::IsCall).Apply();
+		Hook(0x1124F0, SetControllerVibrationHook).Apply();
+		Hook(0x105C58, null_stub, HookFlags::IsCall).Apply(); // remove the hardcoded binding of screenshot to printscreen
 		Patch::NopFill(Pointer::Base(0x6A225B), 2); // Prevent the game from forcing certain binds on load
 		Patch(0x6940E7, { 0x90, 0xE9 }).Apply(); // Disable custom UI input code
 		Hook(0x695012, UpdateUiControllerInputHook, HookFlags::IsCall).Apply();
@@ -155,6 +161,11 @@ namespace Patches::Input
 		for (auto pointer : vehicleCountPointers)
 			Pointer::Base(pointer).Write<int>(static_cast<int>(vehicleCount));
 	}
+
+	void TestControllerVibration(float durationSeconds)
+	{
+		s_ControllerVibrationTestTicks = Blam::Time::SecondsToTicks(durationSeconds);
+	}
 }
 
 namespace
@@ -176,16 +187,6 @@ namespace
 		}
 	}
 
-	void QuickBlockInput()
-	{
-		memset(reinterpret_cast<bool*>(0x238DBEB), 1, eInputType_Count);
-	}
-
-	void QuickUnblockInput()
-	{
-		memset(reinterpret_cast<bool*>(0x238DBEB), 0, eInputType_Count);
-	}
-
 	void UpdateInputHook()
 	{
 		// If the current context is done, pop it off
@@ -195,13 +196,16 @@ namespace
 			contextDone = false;
 		}
 
+		bool allowHandlers = false;
+
 		if (!contextStack.empty())
 		{
 			// Tick the active context
-			QuickUnblockInput();
+			contextStack.top()->InputUnblock();
 			if (!contextStack.top()->GameInputTick())
 				contextDone = true;
-			QuickBlockInput();
+			contextStack.top()->InputBlock();
+			allowHandlers = contextStack.top()->allowHandlers;
 		}
 		else
 		{
@@ -209,6 +213,16 @@ namespace
 			for (auto &&handler : defaultHandlers)
 				handler();
 		}
+
+		if (allowHandlers)
+		{
+			// Run default handlers
+			for (auto &&handler : defaultHandlers)
+				handler();
+		}
+
+		if (s_ControllerVibrationTestTicks-- < 0)
+			s_ControllerVibrationTestTicks = 0;
 	}
 
 	void UiInputTick()
@@ -217,10 +231,10 @@ namespace
 			return;
 
 		// Tick the active context
-		QuickUnblockInput();
+		contextStack.top()->InputUnblock();
 		if (!contextStack.top()->UiInputTick())
 			contextDone = true;
-		QuickBlockInput();
+		contextStack.top()->InputBlock();
 	}
 
 	void ProcessUiInputHook()
@@ -265,7 +279,7 @@ namespace
 		s_ForgeMonitorModeBindings.SecondaryKeys[eGameActionMoveRight] = eKeyCode_None;
 		s_ForgeMonitorModeBindings.SecondaryKeys[eGameActionMoveForward] = eKeyCode_None;
 		s_ForgeMonitorModeBindings.SecondaryKeys[eGameActionMoveBack] = eKeyCode_None;
-		s_ForgeMonitorModeBindings.PrimaryKeys[eGameActionMelee] = eKeyCodeC; // clone
+		s_ForgeMonitorModeBindings.PrimaryKeys[eGameActionUiB] = eKeyCodeC; // Clone
 	}
 
 	// Hook to redirect keybind preference reads to ModuleInput
@@ -324,7 +338,8 @@ namespace
 		typedef void(*EngineProcessKeyBindingsPtr)(const BindingsTable &bindings, ActionState *actions);
 		auto EngineProcessKeyBindings = reinterpret_cast<EngineProcessKeyBindingsPtr>(0x60C4A0);
 
-		if(InMonitorMode())
+		// if we're in monitor mode and no UI is open
+		if(InMonitorMode() && !Pointer(0x05260F34)[0](0x3c).Read<int16_t>())
 			EngineProcessKeyBindings(s_ForgeMonitorModeBindings, actions);
 		else
 			EngineProcessKeyBindings(bindings, actions);
@@ -419,19 +434,38 @@ namespace
 			//Prevent an overflow
 			if (rY == -32768)
 				rY++;
-			Pointer(controllerState)(0x3A).Write<short>(rY * -1);
+			Pointer(controllerState)(0x3A).WriteFast<short>(rY * -1);
 		}
 
 		return val;
 	}
 
 
-	DWORD SetControllerVibrationHook(int dwUserIndex, int a2, char a3)
+	DWORD SetControllerStateHook(int dwUserIndex, int motorSpeed, char disable)
 	{
-		typedef char(*SetControllerVibrationPtr)(int dwUserIndex, int a2, char a3);
-		auto SetControllerVibration = reinterpret_cast<SetControllerVibrationPtr>(0x65F220);
+		static auto SetControllerState = (DWORD(*)(int dwUserIndex, int motorSpeed, char disable))(0x65F220);
+		return SetControllerState((dwUserIndex == 0) ? Modules::ModuleInput::Instance().VarInputControllerPort->ValueInt : dwUserIndex, motorSpeed, disable);
+	}
 
-		return SetControllerVibration(Modules::ModuleInput::Instance().VarInputControllerPort->ValueInt, a2, a3);
+	void SetControllerVibrationHook(int controllerIndex, uint16_t leftMotorSpeed, uint16_t rightMotorSpeed)
+	{
+		struct CONTROLLER_VIBRATION { uint16_t LeftMotorSpeed, RightMotorSpeed; };
+
+		const auto& moduleInput = Modules::ModuleInput::Instance();
+		auto intensity = moduleInput.VarControllerVibrationIntensity->ValueFloat;
+
+		if (s_ControllerVibrationTestTicks > 0)
+		{
+			leftMotorSpeed = 65535;
+			rightMotorSpeed = 65535;
+		}
+
+		leftMotorSpeed = static_cast<uint16_t>(leftMotorSpeed * intensity);
+		rightMotorSpeed = static_cast<uint16_t>(rightMotorSpeed * intensity);
+
+		auto& vibration = ((CONTROLLER_VIBRATION*)0x0238E840)[controllerIndex];
+		vibration.LeftMotorSpeed = leftMotorSpeed;
+		vibration.RightMotorSpeed = rightMotorSpeed;
 	}
 
 	bool IsDualWielding()
@@ -449,10 +483,101 @@ namespace
 		return unitObjectPtr(0x2CB).Read<uint8_t>() != 0xFF;
 	}
 
+	//Checks if two game actions have the same binding, and that same binding is down.
+	//Eg, true if for parameters eGameActionPickUpLeft and eGameActionUseConsumable 1, if both are bound to Z and Z is down.
+	//False if bindings are the same, but different inputs are down, or if bindings are different.
+	bool HasEqualBindingsDown(GameAction action1, GameAction action2, InputType inputType)
+	{
+		auto isUsingController = *(bool*)0x0244DE98;
+		auto& moduleInput = Modules::ModuleInput::Instance();
+		auto bindings = moduleInput.GetBindings();
+
+		//Controller's easy, so check that first.
+		if (isUsingController)
+		{
+			auto action1State = GetActionState(action1);
+			auto action2State = GetActionState(action2);
+
+			if (action1State->Ticks != 0 && action2State->Ticks != 0)
+				return true;
+		}
+		else
+		{
+			//Check keyboard first, with the most bindings it's most likely.
+
+			//Find all keyboard/mouse bindings for the two actions
+			KeyCode action1PrimaryKey = bindings->PrimaryKeys[action1];
+			KeyCode action1SecondaryKey = bindings->SecondaryKeys[action1];
+
+			KeyCode action2PrimaryKey = bindings->PrimaryKeys[action2];
+			KeyCode action2SecondaryKey = bindings->SecondaryKeys[action2];
+
+			//Find which bindings are active
+			bool action1PrimaryKeyDown = GetKeyTicks(action1PrimaryKey, inputType) != 0;
+			bool action1SecondaryKeyDown = GetKeyTicks(action1SecondaryKey, inputType) != 0;
+
+			bool action2PrimaryKeyDown = GetKeyTicks(action2PrimaryKey, inputType) != 0;
+			bool action2SecondaryKeyDown = GetKeyTicks(action2SecondaryKey, inputType) != 0;
+
+			if (action1PrimaryKeyDown)
+			{
+				if (action1PrimaryKey == action2PrimaryKey && action2PrimaryKeyDown)
+					return true;
+				if (action1PrimaryKey == action1SecondaryKey && action1SecondaryKeyDown)
+					return true;
+			}
+			if(action1SecondaryKeyDown)
+			{
+				if (action1SecondaryKey == action2PrimaryKey && action2PrimaryKeyDown)
+					return true;
+				if (action1SecondaryKey == action1SecondaryKey && action1SecondaryKeyDown)
+					return true;
+			}
+
+			//Now check mouse bindings.
+
+			MouseButton action1PrimaryMouseButton = bindings->PrimaryMouseButtons[action1];
+			MouseButton action1SecondaryMouseButton = bindings->SecondaryMouseButtons[action1];
+
+			MouseButton action2PrimaryMouseButton = bindings->PrimaryMouseButtons[action2];
+			MouseButton action2SecondaryMouseButton = bindings->SecondaryMouseButtons[action2];
+
+			bool action1PrimaryMouseButtonDown = GetMouseButtonTicks(action1PrimaryMouseButton, inputType) != 0;
+			bool action1SecondaryMouseButtonDown = GetMouseButtonTicks(action1SecondaryMouseButton, inputType) != 0;
+
+			bool action2PrimaryMouseButtonDown = GetMouseButtonTicks(action2PrimaryMouseButton, inputType) != 0;
+			bool action2SecondaryMouseButtonDown = GetMouseButtonTicks(action2SecondaryMouseButton, inputType) != 0;
+
+			if (action1PrimaryMouseButtonDown)
+			{
+				if (action1PrimaryMouseButton == action2PrimaryMouseButton && action2PrimaryMouseButton)
+					return true;
+				if (action1PrimaryMouseButton == action2SecondaryMouseButton && action2SecondaryMouseButton)
+					return true;
+			}
+			if (action1SecondaryMouseButtonDown)
+			{
+				if (action1SecondaryMouseButton == action2PrimaryMouseButton && action2PrimaryMouseButton)
+					return true;
+				if (action1SecondaryMouseButton == action2SecondaryMouseButton && action2SecondaryMouseButton)
+					return true;
+			}
+		}
+		return false;
+	}
+
 	void LocalPlayerInputHook(int localPlayerIndex, uint32_t playerIndex, int a3, int a4, int a5, uint8_t* state)
 	{
+		struct ControlGlobalsAction
+		{
+			uint16_t Type;
+			uint16_t Flags;
+			uint32_t ObjectIndex;
+			// ...
+		};
+
 		static auto LocalPlayerInputHook = (void(__cdecl*)(int localPlayerIndex, uint32_t playerIndex, int a3, int a4, int a5, uint8_t* state))(0x5D0C90);
-		static auto GetPlayerControlsAction = (int(__cdecl*)(int playerMappingIndex))(0x5D0BD0);
+		static auto GetPlayerControlsAction = (ControlGlobalsAction*(__cdecl*)(int playerMappingIndex))(0x5D0BD0);
 
 		static bool s_SprintToggled = false;
 		static bool s_ConsumablesLocked = false;
@@ -503,8 +628,14 @@ namespace
 		if (*(uint32_t*)(state + 0x18) & 0x10)
 		{
 			// prevent equipment from being used while picking up/swapping weapons when those actions are bound to the same button
-			if (*(uint16_t*)GetPlayerControlsAction(localPlayerIndex) == 1)
-				s_ConsumablesLocked = bindings->ControllerButtons[eGameActionUseConsumable1] == bindings->ControllerButtons[eGameActionPickUpLeft] && GetKeyTicks(bindings->PrimaryKeys[eGameActionUseConsumable1], eInputTypeGame) == 0 && GetKeyTicks(bindings->SecondaryKeys[eGameActionUseConsumable1], eInputTypeGame) == 0;
+			auto controlGlobalsAction = GetPlayerControlsAction(localPlayerIndex);
+			if (controlGlobalsAction->Type == 1 && (controlGlobalsAction->Flags & 4 || controlGlobalsAction->Flags & 8)) // only if it's dual-wieldable
+			{
+				if (isUsingController)
+					s_ConsumablesLocked = bindings->ControllerButtons[eGameActionUseConsumable1] == bindings->ControllerButtons[eGameActionPickUpLeft];
+				else
+					s_ConsumablesLocked = HasEqualBindingsDown(eGameActionUseConsumable1, eGameActionPickUpLeft, eInputTypeGame);
+			}
 		}
 		else
 		{
@@ -513,8 +644,8 @@ namespace
 
 		if (isDualWielding)
 		{
-			if (bindings->ControllerButtons[eGameActionReloadLeft] == bindings->ControllerButtons[eGameActionUseConsumable1])
-				s_ConsumablesLocked = true;
+			if(!s_ConsumablesLocked)
+				s_ConsumablesLocked = HasEqualBindingsDown(eGameActionUseConsumable1, eGameActionReloadLeft, eInputTypeGame);
 
 			if (bindings->ControllerButtons[eGameActionMelee] == bindings->ControllerButtons[eGameActionFireLeft])
 				*(uint32_t *)(state + 0x18) &= ~0x20u;

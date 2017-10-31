@@ -8,7 +8,10 @@ namespace
 
 	int FmodChannelCountHook();
 	int __stdcall FMOD_System_Init_Hook(void* system, int maxchannels, int flags, int extradriverdata, int a5);
-	int __fastcall snd_SYSTEM_FMOD_Init_Hook(int thisptr, void* unusded, int a2, int a3);
+	bool __fastcall snd_SYSTEM_FMOD_Init_Hook(uint8_t* thisptr, void* unused, int a2, int a3);
+	int16_t sub_661C20_hook(void *sndDef, float pitchModifier, int16_t fallbackIndex);
+
+	const auto s_HaloSoundSystemPtr = (void**)0x018BC9C8;
 }
 
 namespace Patches::Audio
@@ -44,16 +47,19 @@ namespace Patches::Audio
 
 		Pointer(0x01750794).Write(uint32_t(&FMOD_System_Init_Hook));
 		Pointer(0x0176CA18).Write(uint32_t(&snd_SYSTEM_FMOD_Init_Hook));
+
+		// prevent invalid pitch range index from being returned and causing crashes
+		Hook(0x264E39, sub_661C20_hook, HookFlags::IsCall).Apply();
 	}
 
 	bool SetOutputDevice(int deviceIndex)
 	{
 		static auto FMOD_System_SetDriver = (int(__thiscall *)(void *fmodSoundSystem, int driver))(0x139771C);
 
-		auto haloSoundSystemPtr = (void**)0x018BC9C8;
-		if (!haloSoundSystemPtr)
+		auto soundSystem = *s_HaloSoundSystemPtr;
+		if (!soundSystem)
 			return false;
-		auto fmodSystem = *((void**)(*haloSoundSystemPtr) + 1);
+		auto fmodSystem = *((void**)(soundSystem) + 1);
 		if (!fmodSystem)
 			return false;
 
@@ -74,15 +80,42 @@ namespace
 		return FMOD_System_Init(system, MAX_CHANNELS, flags, extradriverdata, a5);
 	}
 
-	int __fastcall snd_SYSTEM_FMOD_Init_Hook(int thisptr, void* unused, int a2, int a3)
+	bool __fastcall snd_SYSTEM_FMOD_Init_Hook(uint8_t* thisptr, void* unused, int a2, int a3)
 	{
-		static auto snd_SYSTEM_FMOD_Init = (int(__thiscall *)(int thisptr, int a2, int a3))(0x004047B0);
-		auto result = snd_SYSTEM_FMOD_Init(thisptr, a2, a3);
+		static auto snd_SYSTEM_FMOD_PrepareInit = (bool(*)())(0x00404D10);
+		static auto sub_1353A80 = (bool(__stdcall*)(void *a1))(0x01353A80);
+		static auto snd_SYSTEM_FMOD_InitEventSystem = (bool(__thiscall*)(void *thisptr, void* a2))(0x00404D70);
+		static auto sub_64D9A0 = (bool(__thiscall *)(void* thisptr, int a2, int a3))(0x64D9A0);
+
+		*(uint32_t*)0x0698D054 = GetCurrentThreadId(); // g_SoundThreadId
+
+		if (!snd_SYSTEM_FMOD_PrepareInit() ||
+			sub_1353A80((void*)(thisptr + 0x30)) ||
+			(*(int(__stdcall **)(uint32_t, void *))(**(uint32_t **)(thisptr + 0x30) + 28))(*(uint32_t *)(thisptr + 0x30), (void*)0x69AD05C) ||
+			!snd_SYSTEM_FMOD_InitEventSystem(thisptr, &a2))
+		{
+			return false;
+		}
+
+		auto haloSoundSystem = *s_HaloSoundSystemPtr;
+		if (!haloSoundSystem || !sub_64D9A0(haloSoundSystem, a2, 1))
+			return false;
+
+		*(uint32_t *)(thisptr + 4) |= 1u;
 
 		auto outputDevice = Modules::ModuleSettings::Instance().VarAudioOutputDevice->ValueInt;
-		if (result && outputDevice)
+		if (outputDevice)
 			Patches::Audio::SetOutputDevice(outputDevice);
 
-		return result;
+		return true;
+	}
+
+	int16_t sub_661C20_hook(void *sndDef, float pitchModifier, int16_t fallbackIndex)
+	{
+		const auto sub_661C20 = (int16_t(*)(void *sndDef, float pitchModifier, int16_t fallbackIndex))(0x661C20);
+		auto ret = sub_661C20(sndDef, pitchModifier, fallbackIndex);
+		if (ret == -1)
+			ret = 0;
+		return ret;
 	}
 }

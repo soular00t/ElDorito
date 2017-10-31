@@ -71,10 +71,10 @@ namespace Blam::Network
 		int Unknown0;
 		int Unknown4;
 		int PlayerUpdateCount; // ?
-		int UnknownC;
+		int LeaderPeerIndex;
 		int HostPeerIndex;
 		int Unknown14;
-		int Unknown18;
+		int SessionMaxPlayers;
 		int Unknown1C;
 		int Unknown20;
 		int Unknown24;
@@ -109,6 +109,9 @@ namespace Blam::Network
 		// Gets a peer's team index, or -1 on failure.
 		// Note that -1 does NOT mean that teams are disabled.
 		int GetPeerTeam(int peer) const;
+		
+		//Gets the local game's player session
+		PlayerSession GetLocalPlayerSession() const;
 
 		// Signals that membership data has been changed and needs to be updated.
 		// Call this after modifying player or peer data.
@@ -136,7 +139,9 @@ namespace Blam::Network
 	// c_network_session_parameter_map_variant
 	struct MapVariantSessionParameter: SessionParameter
 	{
-		uint8_t Unknown0[0x2A1D0];
+		uint8_t Unknown0[0x118];
+		int32_t MapID;
+		uint8_t Unknown1[0x2A0B4];
 
 		// Gets the current variant data, or null if not available.
 		void* Get() const;
@@ -153,6 +158,7 @@ namespace Blam::Network
 
 		// Sets the session mode parameter.
 		// TODO: Map out this enum
+		int GetSessionMode();
 		bool SetSessionMode(int mode);
 	};
 	static_assert(sizeof(SessionParameters) == 0xB7924, "Invalid c_network_session_parameters size");
@@ -369,8 +375,20 @@ namespace Blam::Network
 	// Kicks a player.
 	bool BootPlayer(int playerIndex, int reason);
 
+	// Gets the lobby type. Also known as GetUiGameMode
+	int GetLobbyType();
+
+	// Gets the network mode
+	int GetNetworkMode();
+
+	//Sets the Network Mode.
+	bool SetNetworkMode(int mode);
+
 	// Requests to end the game.
 	bool EndGame();
+
+	// Disconnect from the current game.
+	bool Disconnect();
 
 	// Leaves the current game.
 	void LeaveGame();

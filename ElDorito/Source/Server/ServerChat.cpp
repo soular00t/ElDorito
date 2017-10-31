@@ -4,6 +4,7 @@
 #include "Rcon.hpp"
 #include "../Patches/CustomPackets.hpp"
 #include "../Modules/ModuleServer.hpp"
+#include "../Modules/ModuleGame.hpp"
 #include "../Utils/String.hpp"
 #include <unordered_map>
 #include <fstream>
@@ -245,7 +246,7 @@ namespace
 	// Writes a message to the log file.
 	std::string GetLogString(Blam::Network::Session *session, int peer, const ChatMessage &message)
 	{
-		
+
 		// Get the UTC time
 		auto now = std::chrono::system_clock::now();
 		auto time = std::chrono::system_clock::to_time_t(now);
@@ -263,10 +264,13 @@ namespace
 			uid = session->MembershipInfo.PlayerSessions[playerIndex].Properties.Uid;
 		std::ostringstream ss;
 
+		char uidStr[17];
+		Blam::Players::FormatUid(uidStr, uid);
+
 
 		ss << "[" << std::put_time(&gmTime, "%m/%d/%y %H:%M:%S") << "] "; // Timestamp
 		ss << "<" << sender << "/"; // Sender name
-		ss << std::setw(16) << std::setfill('0') << std::hex << uid << std::dec << std::setw(0) << "/"; // UID
+		ss << uidStr << "/"; // UID
 		ss << (ip >> 24) << "." << ((ip >> 16) & 0xFF) << "." << ((ip >> 8) & 0xFF) << "." << (ip & 0xFF) << "> "; // IP address
 		ss << message.Body; // Message body
 		return ss.str();
@@ -280,13 +284,13 @@ namespace
 			return;
 
 		// Try to open the log file for appending
-		auto logPath = Modules::ModuleServer::Instance().VarChatLogPath->ValueString;
-		std::ofstream logFile(logPath, std::ios::app);
+		auto chatLogFile = Modules::ModuleServer::Instance().VarChatLogFile->ValueString;
+		std::ofstream logFile(chatLogFile, std::ios::app);
 		if (!logFile)
 			return;
 
 		logFile << GetLogString(session,peer, message) << "\n";
-	
+
 	}
 
 	// Callback for when a message is received as the host.
@@ -416,7 +420,7 @@ namespace Server::Chat
 		ChatMessage message(ChatMessageType::Global, body);
 		return SendClientMessage(session, message);
 	}
-	//Sends a server message to all peers. 
+	//Sends a server message to all peers.
 	bool SendServerMessage(const std::string &body)
 	{
 		auto session = Blam::Network::GetActiveSession();
@@ -436,6 +440,23 @@ namespace Server::Chat
 
 		ChatMessage message(ChatMessageType::Team, body);
 		return SendClientMessage(session, message);
+	}
+
+	bool SendAndLogServerMessage(const std::string &body)
+	{
+		auto session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished() || !session->IsHost())
+			return false;
+
+		PeerBitSet p;
+		p.set();
+		ChatMessage message(ChatMessageType::Server, body);
+
+		if (Modules::ModuleServer::Instance().VarSendChatToRconClients->ValueInt == 1)
+			Server::Rcon::SendMessageToClients(GetLogString(session, session->MembershipInfo.LocalPeerIndex, message));
+		LogMessage(session, session->MembershipInfo.LocalPeerIndex, message);
+
+		return BroadcastMessage(session, session->MembershipInfo.LocalPeerIndex, &message, p);
 	}
 	//So I dont have to create a new PeerBitSet all the time when sending it to just one peer
 	bool SendServerMessage(const std::string &body, int peer)

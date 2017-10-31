@@ -46,7 +46,14 @@ namespace
 		int peerIdx;
 	};
 
-	bool ProcessEcho(const char* echo, coninfo &info);
+	enum RejectionReason
+	{
+		eBadPassword,
+		eSessionHasBadInfo,
+		eNone
+	};
+
+	RejectionReason ProcessPassword(const char* echo, coninfo &info);
 	void CreatePasswords();
 	void ResetPassword(int playerIndex);
 	void ForceStopServer();
@@ -58,7 +65,7 @@ namespace
 
 	static std::string currentPassword = "not-connected";
 	static uint16_t port;
-	
+
 	struct WebSocketPacketData
 	{
 		char echoString[PASSWORD_LENGTH + 1];
@@ -99,7 +106,7 @@ namespace Server::Signaling
 		auto session = Blam::Network::GetActiveSession();
 		CreatePasswords();
 		currentPassword = authStrings[session->MembershipInfo.HostPeerIndex];
-		port = Modules::ModuleServer::Instance().VarSignalServerPort->ValueInt; 
+		port = Modules::ModuleServer::Instance().VarSignalServerPort->ValueInt;
 		Web::Ui::ScreenLayer::Notify("signal-ready", ServerPortJson(), true);
 		if (Modules::ModuleUPnP::Instance().VarUPnPEnabled->ValueInt)
 		{
@@ -108,7 +115,7 @@ namespace Server::Signaling
 		if (!is_listening)
 			CreateThread(nullptr, 0, SignalingThread, nullptr, 0, nullptr);
 	}
-		
+
 	void StopServer()
 	{
 		if (is_listening)
@@ -204,7 +211,7 @@ namespace
 
 		if (session->IsHost())
 			return;
-		
+
 		currentPassword = std::string(packet->Data.echoString);
 		port = packet->Data.serverPort;
 
@@ -318,9 +325,13 @@ namespace
 			return;
 		if (it->second.authed == false)
 		{
-			if (!ProcessEcho(msg->get_payload().c_str(), it->second))
+			RejectionReason reject = ProcessPassword(msg->get_payload().c_str(), it->second);
+			if (reject != RejectionReason::eNone)
 			{
-				signalServer->get_con_from_hdl(hdl)->send("bad password");
+				if(reject == RejectionReason::eBadPassword)
+					signalServer->get_con_from_hdl(hdl)->send("bad password");
+				else if(reject == RejectionReason::eSessionHasBadInfo)
+					signalServer->get_con_from_hdl(hdl)->send("try again later");
 				return;
 			}
 		}
@@ -333,7 +344,7 @@ namespace
 		rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
 
 		std::string proto = signalServer->get_con_from_hdl(hdl)->get_requested_subprotocols()[0];
-		
+
 		if (doc.HasMember("leave") || doc.HasMember("uid"))
 			return;
 
@@ -382,8 +393,8 @@ namespace
 	{
 		connectedSockets.erase(hdl);
 	}
-	
-	bool ProcessEcho(const char* echo, coninfo &info)
+
+	RejectionReason ProcessPassword(const char* echo, coninfo &info)
 	{
 		auto *session = Blam::Network::GetActiveSession();
 		int peerIdx = session->MembershipInfo.FindFirstPeer();
@@ -391,16 +402,24 @@ namespace
 		{
 			if(std::strcmp(echo, authStrings[peerIdx].c_str()) == 0)
 			{
+				std::string name = Utils::String::ThinString(session->MembershipInfo.PlayerSessions[session->MembershipInfo.GetPeerPlayer(peerIdx)].Properties.DisplayName);
+
+				if (name == "" || session->MembershipInfo.PlayerSessions[session->MembershipInfo.GetPeerPlayer(peerIdx)].Properties.Uid == 0)
+					return RejectionReason::eSessionHasBadInfo;
+
+				char uid[17];
+				Blam::Players::FormatUid(uid, session->MembershipInfo.PlayerSessions[session->MembershipInfo.GetPeerPlayer(peerIdx)].Properties.Uid);
+
 				std::stringstream ss;
-				ss << Utils::String::ThinString(session->MembershipInfo.PlayerSessions[session->MembershipInfo.GetPeerPlayer(peerIdx)].Properties.DisplayName) << "|" << std::hex << session->MembershipInfo.PlayerSessions[session->MembershipInfo.GetPeerPlayer(peerIdx)].Properties.Uid; //unique
+				ss << name << "|" << uid; //unique
 				info.uid = ss.str();
 				info.authed = true;
 				info.peerIdx = peerIdx;
-				return true;
+				return RejectionReason::eNone;
 			}
 			peerIdx = session->MembershipInfo.FindNextPeer(peerIdx);
 		}
-		return false;
+		return RejectionReason::eBadPassword;
 	}
 
 	void CreatePasswords()

@@ -1,4 +1,5 @@
 var hasGP = false;
+var announceNum = 0;
 
 $("html").on("keydown", function(e) {
     if (e.which == 13){
@@ -10,18 +11,47 @@ $("html").on("keydown", function(e) {
 });
 
 dew.on("show", function(e){
-    //dew.command('Game.FirstRun', {}).then(function(response){
-    //    if(response == 1){
-    //        $("#initialInstructions").show();         
-    //    };
-    //});
-    dew.command('Settings.Gamepad', {}).then(function(result){
+    dew.command('Game.SkipTitleSplash', {}).then(function(result){
         if(result == 1){
-            onControllerConnect();
-            hasGP = true;
+            dew.captureInput(false);
+            $(".genericLoader").hide();
+            $("#blackLayer").fadeOut(2000, function() {
+                dew.hide();
+            });
         }else{
-            onControllerDisconnect();
-            hasGP = false;
+            $("#blackLayer").hide();
+            $.getJSON( "http://scooterpsu.github.io/announcements.json", function(data) {
+                if(data.announcements.length){
+                    //dew.command('Game.FirstRun', {}).then(function(response){
+                        //if(response == 1){
+                           $("#announcementBox").show(); 
+                        //};
+                    //});
+                    for(var i = 0; i < data.announcements.length; i++){
+                        $('#announcementBox').append(
+                            $('<div>',{
+                                class: 'announcement'
+                            }).append($('<p>',{
+                                class: 'announceTitle',
+                                text: data.announcements[i].title
+                            })).append($('<p>',{
+                                class: 'announceContent',
+                                html: data.announcements[i].content
+                            }))
+                        );
+                    }
+                    $('.announcement').eq(0).show();
+                }
+            }); 
+            dew.command('Settings.Gamepad', {}).then(function(result){
+                if(result == 1){
+                    onControllerConnect();
+                    hasGP = true;
+                }else{
+                    onControllerDisconnect();
+                    hasGP = false;
+                }
+            });
         }
     });
 });
@@ -56,8 +86,20 @@ dew.on('controllerinput', function(e){
 function hideScreen(){
     $( "body" ).fadeOut( 500, function() {
         dew.hide();
-        dew.command('Game.FirstRun 0', {}).then(function(e){
-            dew.command('writeconfig', {}).then(function(e){});
-        });
     });
+}
+
+function nextAnnounce(){
+    if(announceNum < $('.announcement').length-1){
+        $('.announcement').hide();
+        announceNum++;
+        $('.announcement').eq(announceNum).show();
+    }
+}
+
+function closeAnnounce(){
+    $('#announcementBox').hide();
+    /*dew.command('Game.FirstRun 0', {}).then(function(){
+        dew.command('writeconfig');
+    });*/
 }

@@ -71,7 +71,7 @@ namespace Blam
 		uint64_t Timestamp;
 		uint32_t Unknown6; // 0
 		uint32_t Unknown7; // -1
-		uint32_t Unknown8; // 0x140 for maps, -1 for variants, 
+		uint32_t Unknown8; // 0x140 for maps, -1 for variants,
 		uint32_t Unknown9; // 0 for maps, 4 for variants
 		uint32_t Unknown10; // -1;
 		uint32_t Unknown11; // 0;
@@ -196,7 +196,8 @@ namespace Blam
 		struct VariantProperties
 		{
 			uint16_t EngineFlags;
-			uint16_t ObjectFlags;
+			uint8_t ObjectFlags;
+			uint8_t TeamAffilation;
 			uint8_t SharedStorage;
 			uint8_t RespawnTime;
 			uint8_t ObjectType;
@@ -236,7 +237,7 @@ namespace Blam
 		float WorldBoundsYMax;
 		float WorldBoundsZMin;
 		float WorldBoundsZMax;
-		uint32_t Unknown11C;
+		uint32_t ContentType;
 		float MaxBudget;
 		float CurrentBudget;
 		uint32_t Unknown128;
@@ -316,13 +317,14 @@ namespace GameGlobals
 		const unsigned EnableIndex = 0;
 		const unsigned IntensityIndex = 8;
 	}
-	
+
 	namespace Input
 	{
 		const size_t TLSOffset = 0xC4;
 		const size_t DisablePlayerInputIndex = 6;
 		const size_t HorizontalViewAngle = 0x30C;
 		const size_t VerticalViewAngle = 0x310;
+		const size_t CarryType = 0x3D9;
 	}
 
 	namespace GameInfo

@@ -2,6 +2,9 @@
 #include <sstream>
 #include "../ElDorito.hpp"
 #include "../Blam/BlamNetwork.hpp"
+#include "../Patches/Ui.hpp"
+#include "../Blam/BlamInput.hpp"
+#include "ModuleInput.hpp"
 
 namespace
 {
@@ -113,6 +116,7 @@ namespace
 		}
 	}
 
+
 	bool VariableCameraCrosshairUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		unsigned long value = Modules::ModuleCamera::Instance().VarCameraCrosshair->ValueInt;
@@ -131,11 +135,10 @@ namespace
 
 	bool VariableCameraFovUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
-		float value = Modules::ModuleCamera::Instance().VarCameraFov->ValueFloat;
-
+		auto &moduleCamera = Modules::ModuleCamera::Instance();
+		float value = moduleCamera.VarCameraFov->ValueFloat;
 		Pointer::Base(0x1F01D98).Write(value);
 		Pointer::Base(0x149D42C).Write(value);
-
 		return true;
 	}
 
@@ -149,6 +152,8 @@ namespace
 			status = "hidden.";
 
 		Modules::ModuleCamera::Instance().HideHudPatch.Apply(!statusBool);
+
+		Patches::Ui::UpdateHUDDistortion();
 
 		returnInfo = "HUD " + status;
 		return true;
@@ -196,7 +201,7 @@ namespace
 	bool VariableCameraPositionUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo) {
 		Pointer &directorGlobalsPtr = ElDorito::GetMainTls(GameGlobals::Director::TLSOffset)[0];
 
-		if (Arguments.size() < 1 || Arguments.size() > 3) {
+		if (Arguments.size() < 3) {
 			std::stringstream ss;
 			ss << "X: " << directorGlobalsPtr(0x834).Read<float>() << ", Y: " << directorGlobalsPtr(0x838).Read<float>() << ", Z: " << directorGlobalsPtr(0x83C).Read<float>();
 			returnInfo = ss.str();
@@ -361,7 +366,7 @@ namespace Modules
 		HideHudPatch(0x12B5A5C, { 0xC3, 0xF5, 0x48, 0x40 }), // 3.14f in hex form
 		CenteredCrosshairFirstPersonPatch(0x25FA43, { 0x31, 0xC0, 0x90, 0x90 }),
 		CenteredCrosshairThirdPersonPatch(0x32989C, { 0x31, 0xC0, 0x90, 0x90 }),
-		ShowCoordinatesPatch(0x192064, { 0x00 })
+		ShowCoordinatesPatch(0x192064, { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 })
 	{
 		// TODO: commands for setting camera speed, positions, save/restore etc.
 
@@ -371,7 +376,7 @@ namespace Modules
 
 		VarCameraFov = AddVariableFloat("FOV", "fov", "The cameras field of view", eCommandFlagsArchived, 90.f, VariableCameraFovUpdate);
 		VarCameraFov->ValueFloatMin = 55.f;
-		VarCameraFov->ValueFloatMax = 155.f;
+		VarCameraFov->ValueFloatMax = 120.f;
 
 		VarCameraHideHud = AddVariableInt("HideHUD", "hud", "Toggles the HUD", eCommandFlagsArchived, 0, VariableCameraHideHudUpdate);
 		VarCameraHideHud->ValueIntMin = 0;
@@ -427,65 +432,39 @@ namespace Modules
 		float iRight = cos(hLookAngle + 3.14159265359f / 2);
 		float jRight = sin(hLookAngle + 3.14159265359f / 2);
 
-		// TODO: use shockfire's keyboard hooks instead
+		struct ControllerAxes { int16_t LeftX, LeftY, RightX, RightY; };
+		auto& controllerAxes = *(ControllerAxes*)(0x0244D1F0 + 0x2F4);
+		bool controllerEnabled = Pointer::Base(0x204DE98).Read<bool>();
 
-		// down
-		if (GetAsyncKeyState('Q') & 0x8000)
-		{
+		if (GetActionState(Blam::Input::eGameActionUiLeftBumper)->Ticks > 0)
 			zPos -= moveDelta;
-		}
 
-		// up
-		if (GetAsyncKeyState('E') & 0x8000)
-		{
+		if (GetActionState(Blam::Input::eGameActionUiRightBumper)->Ticks > 0)
 			zPos += moveDelta;
+
+		if (GetActionState(Blam::Input::eGameActionMoveForward)->Ticks > 0 || GetActionState(Blam::Input::eGameActionMoveBack)->Ticks > 0 || (controllerEnabled && controllerAxes.LeftY != 0))
+		{
+			float mod = 1;
+			if (controllerEnabled)
+				mod = controllerAxes.LeftY / 32768.0f;
+			else if (GetActionState(Blam::Input::eGameActionMoveBack)->Ticks > 0)
+				mod = -1;
+
+			xPos += iForward * (moveDelta * mod);
+			yPos += jForward * (moveDelta * mod);
+			zPos += kForward * (moveDelta * mod);
 		}
 
-		// forward
-		if (GetAsyncKeyState('W') & 0x8000)
+		if (GetActionState(Blam::Input::eGameActionMoveLeft)->Ticks > 0 || GetActionState(Blam::Input::eGameActionMoveRight)->Ticks > 0 || (controllerEnabled && controllerAxes.LeftX != 0))
 		{
-			xPos += iForward * moveDelta;
-			yPos += jForward * moveDelta;
-			zPos += kForward * moveDelta;
-		}
+			float mod = 1;
+			if (controllerEnabled)
+				mod = controllerAxes.LeftX / 32768.0f;
+			else if (GetActionState(Blam::Input::eGameActionMoveLeft)->Ticks > 0)
+				mod = -1;
 
-		// back
-		if (GetAsyncKeyState('S') & 0x8000)
-		{
-			xPos -= iForward * moveDelta;
-			yPos -= jForward * moveDelta;
-			zPos -= kForward * moveDelta;
-		}
-
-		// left
-		if (GetAsyncKeyState('A') & 0x8000)
-		{
-			xPos += iRight * moveDelta;
-			yPos += jRight * moveDelta;
-		}
-
-		// right
-		if (GetAsyncKeyState('D') & 0x8000)
-		{
-			xPos -= iRight * moveDelta;
-			yPos -= jRight * moveDelta;
-		}
-
-		if (GetAsyncKeyState(VK_UP))
-		{
-			// TODO: look up
-		}
-		if (GetAsyncKeyState(VK_DOWN))
-		{
-			// TODO: look down
-		}
-		if (GetAsyncKeyState(VK_LEFT))
-		{
-			// TODO: look left
-		}
-		if (GetAsyncKeyState(VK_RIGHT))
-		{
-			// TODO: look right
+			xPos -= iRight * (moveDelta * mod);
+			yPos -= jRight * (moveDelta * mod);
 		}
 
 		if (GetAsyncKeyState('Z') & 0x8000)
@@ -498,18 +477,18 @@ namespace Modules
 		}
 
 		// update position
-		directorGlobalsPtr(0x834).Write<float>(xPos);
-		directorGlobalsPtr(0x838).Write<float>(yPos);
-		directorGlobalsPtr(0x83C).Write<float>(zPos);
+		directorGlobalsPtr(0x834).WriteFast<float>(xPos);
+		directorGlobalsPtr(0x838).WriteFast<float>(yPos);
+		directorGlobalsPtr(0x83C).WriteFast<float>(zPos);
 
 		// update look angles
-		directorGlobalsPtr(0x85C).Write<float>(cos(hLookAngle) * cos(vLookAngle));
-		directorGlobalsPtr(0x860).Write<float>(sin(hLookAngle) * cos(vLookAngle));
-		directorGlobalsPtr(0x864).Write<float>(sin(vLookAngle));
-		directorGlobalsPtr(0x868).Write<float>(-cos(hLookAngle) * sin(vLookAngle));
-		directorGlobalsPtr(0x86C).Write<float>(-sin(hLookAngle) * sin(vLookAngle));
-		directorGlobalsPtr(0x870).Write<float>(cos(vLookAngle));
+		directorGlobalsPtr(0x85C).WriteFast<float>(cos(hLookAngle) * cos(vLookAngle));
+		directorGlobalsPtr(0x860).WriteFast<float>(sin(hLookAngle) * cos(vLookAngle));
+		directorGlobalsPtr(0x864).WriteFast<float>(sin(vLookAngle));
+		directorGlobalsPtr(0x868).WriteFast<float>(-cos(hLookAngle) * sin(vLookAngle));
+		directorGlobalsPtr(0x86C).WriteFast<float>(-sin(hLookAngle) * sin(vLookAngle));
+		directorGlobalsPtr(0x870).WriteFast<float>(cos(vLookAngle));
 
-		directorGlobalsPtr(0x858).Write<float>(fov);
+		directorGlobalsPtr(0x858).WriteFast<float>(fov);
 	}
 }

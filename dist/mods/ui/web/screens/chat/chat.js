@@ -19,6 +19,43 @@ var teamArray = [
 var playerName;
 var hideChat;
 var hasGP = false;
+var pageWidth, pageHeight;
+var basePage = {
+    width: 1280,
+    height: 720,
+    scale: 1,
+    scaleX: 1,
+    scaleY: 1
+};
+var playerTabIndex = -1;
+var playersMatchList = [];
+
+$(function(){
+    var $page = $('.page_content');
+
+    getPageSize();
+    scalePages($page, pageWidth, pageHeight);
+  
+    $(window).resize(function() {
+        getPageSize();            
+        scalePages($page, pageWidth, pageHeight);
+    });
+  
+    function getPageSize() {
+        pageHeight = $('#container').height();
+        pageWidth = $('#container').width();
+    }
+
+    function scalePages(page, maxWidth, maxHeight) {            
+        var scaleX = 1, scaleY = 1;                      
+        scaleX = maxWidth / basePage.width;
+        scaleY = maxHeight / basePage.height;
+        basePage.scaleX = scaleX;
+        basePage.scaleY = scaleY;
+        basePage.scale = (scaleX > scaleY) ? scaleY : scaleX;
+        page.attr('style', '-webkit-transform:scale(' + basePage.scale + ');');
+    }
+});
 
 $(window).load(function(){
     dew.command('Player.Name').then(function(res) {
@@ -27,6 +64,9 @@ $(window).load(function(){
     $(document).keyup(function (e) {
         if (e.keyCode === 27) {
             chatboxHide();
+        }
+        if (e.keyCode == 44) {
+            dew.command('Game.TakeScreenshot');  
         }
     });
     $(document).keydown(function(e){
@@ -47,6 +87,12 @@ $(window).load(function(){
             $("#chatWindow").scrollTop($("#chatWindow").scrollTop()+($('#chatWindow p').height() * 6));        
         }
     });
+	
+	$("html").on("keydown", function(e){ //disable tabbing
+		if(e.keyCode == 9){ //tab
+			e.preventDefault();
+		}
+	});
 
     $("body").click(function(){
         $("#chatBox").focus();
@@ -89,7 +135,7 @@ $(window).load(function(){
                                 stayOpen = true;
                                 $("#chatBox").show(0, "linear", function(){
                                     $("#chatBox").focus();
-                                    $("#chatWindow").css("bottom", "3.54vh");
+                                    $("#chatWindow").css("bottom", "26px");
                                     $("#chatWindow").removeClass("hide-scrollbar");
                                 });
                             }else{
@@ -99,7 +145,9 @@ $(window).load(function(){
                                 fadeAway();
                             }
                         }
-                        $("#chatWindow").scrollTop($('#chatWindow')[0].scrollHeight);
+                        if($("#chatWindow p").length){
+                            $("#chatWindow p").last()[0].scrollIntoView(false);
+                        }
                     }else{
                         dew.hide();
                     }
@@ -150,6 +198,36 @@ $(window).load(function(){
             }
         });
     });
+
+    $("#chatBox").keyup(function (e) {
+        var wordArray = $("#chatBox").val().split(' ');
+        if (e.keyCode == 9) { //tab
+            if (playerTabIndex == -1) {
+                if (wordArray[wordArray.length - 1] != '' && wordArray[wordArray.length - 1].startsWith('@')) {
+                    dew.getScoreboard().then(function (e) {
+                        playersMatchList = [];
+                        $.each(e.players, function (index, obj) {
+                            if (e.players[index].name.toLowerCase().startsWith(wordArray[wordArray.length - 1].substring(1).toLowerCase())) {
+                                playersMatchList.push(e.players[index].name);
+                            }
+                        });
+                        playerTabIndex = 0;
+                        wordArray.splice(wordArray.length - 1, 1);
+                        wordArray.push('@' + playersMatchList[playerTabIndex]);
+                        $("#chatBox").val(wordArray.join(' '));
+                    });
+                }
+            } else {
+                playerTabIndex++;
+                if (playerTabIndex > playersMatchList.length - 1)
+                    playerTabIndex = 0;
+                wordArray.splice(wordArray.length - 1, 1);
+                wordArray.push('@' + playersMatchList[playerTabIndex]);
+                $("#chatBox").val(wordArray.join(' '));
+            }
+        } else
+            playerTabIndex = -1;
+    });
 });
 
 function fadeAway(){
@@ -179,7 +257,6 @@ function hexToRgba(hex,opacity){
 function aWrap(link) {
     return '<a href="' + link + '" target="_blank">' + link + '<\/a>';
 };
-
 
 dew.on('controllerinput', function(e){       
     if(hasGP){

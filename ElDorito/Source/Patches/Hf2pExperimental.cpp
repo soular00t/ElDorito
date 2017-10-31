@@ -1,5 +1,6 @@
 #pragma once
 #include "Hf2pExperimental.hpp"
+#include "../Blam/Math/RealVector3D.hpp"
 #include "../Blam/BlamInput.hpp"
 #include "../Modules/ModuleSettings.hpp"
 #include "../Modules/ModuleServer.hpp"
@@ -8,12 +9,16 @@
 #include "../ElDorito.hpp"
 #include "../Patches/Ui.hpp"
 #include "../Patches/Core.hpp"
-#include "../Patches/Armor.hpp"
 #include "../Web/Ui/ScreenLayer.hpp"
 #include "../Web/Ui/WebTimer.hpp"
 #include "../ElDorito.hpp"
 #include "../Blam/BlamPlayers.hpp"
 #include "../Blam/BlamTime.hpp"
+#include "../Web/Ui/WebScoreboard.hpp"
+#include "../Blam/Tags/Scenario/Scenario.hpp"
+#include "../Game/Armor.hpp"
+#include "../Forge/PrematchCamera.hpp"
+#include "../Forge/ForgeUtil.hpp"
 
 namespace
 {
@@ -59,7 +64,7 @@ namespace
 		uint8_t VSync;
 		uint8_t Antialiasing;
 		uint8_t Unknown41C0F;
-		uint8_t ShowWatermark;
+		uint8_t HideWatermark;
 		uint32_t DisplaySubtitles;
 		uint32_t DisplayAdapter;
 		uint32_t Unknown41C1C;
@@ -108,10 +113,15 @@ namespace
 	void Hf2pShutdownHook();
 	void Hf2pTickHook();
 	void Hf2pLoadPreferencesHook();
+	bool SpawnTimerDisplayHook(int hudIndex, wchar_t* buff, int len, int a4);
+	void game_engine_tick_hook();
+	int game_engine_get_delta_ticks_hook();
 
 	void UI_StartMenuScreenWidget_OnDataItemSelectedHook();
 
 	void OnMapLoaded(const char *mapPath);
+
+	void SpawnTimerUpdate();
 }
 
 namespace Patches::Hf2pExperimental
@@ -119,12 +129,13 @@ namespace Patches::Hf2pExperimental
 	void ApplyAll()
 	{
 		Hook(0x200630, Hf2pInitHook).Apply();
-		// we no longer have sound_config.ps
-		Patch(0x04858, { 0x90, 0x90 }).Apply();
+		// we no longer have game.cfg or sound_config.ps
+		Patch(0x24F6B0, { 0xC3 }).Apply();
+		Patch(0x24EF50, { 0xC3 }).Apply();
 		// skip over vfiles_plugin load
 		Patch(0x010F1121, { 0xE9 }).Apply();
-		// skip anti-cheat, watermark, account stuff
-		Patch(0x200732, { 0xEB }).Apply();
+		// skip config, anti-cheat, watermark, account stuff
+		Patch(0x2006F0, { 0xC3 }).Apply();
 		// prevent display/graphics settings from resetting when preferences.dat doesn't exist
 		Patch(0x622920, { 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3 }).Apply();
 
@@ -133,6 +144,13 @@ namespace Patches::Hf2pExperimental
 		Hook(0x10CB01, Hf2pLoadPreferencesHook, HookFlags::IsCall).Apply();
 
 		Hook(0x6F740E, UI_StartMenuScreenWidget_OnDataItemSelectedHook).Apply();
+
+		Hook(0x6963C6, SpawnTimerDisplayHook, HookFlags::IsCall).Apply();
+
+		// NOTE: this is not a proper fix. The pre-match camera needs to be looked at
+		Hook(0x1527F7, game_engine_tick_hook, HookFlags::IsCall).Apply();
+		// infection
+		Hook(0x5DD4BE, game_engine_get_delta_ticks_hook, HookFlags::IsCall).Apply();
 
 		Patches::Core::OnMapLoaded(OnMapLoaded);
 	}
@@ -146,6 +164,7 @@ namespace
 	const auto UI_ScreenManager_GetScreenWidget = (void* (__thiscall *)(void *thisptr, int a2, uint32_t nameId))(0x00AAB550);
 	const auto UI_ScreenManager_AnyActiveScreens = (bool(__thiscall *)(void *thisptr, int a2))(0x00AAA970);
 	const auto UI_GetScreenManager = (void*(*)())(0x00AAD930);
+	const auto UI_PlaySound = (void(*)(int index, uint32_t uiseTagIndex))(0x00AA5CD0);
 
 	void Hf2pInitHook()
 	{
@@ -171,11 +190,24 @@ namespace
 		auto uiStartAction = Blam::Input::GetActionState(eGameActionUiStart);
 		if (!(uiStartAction->Flags & eActionStateFlagsHandled) && uiStartAction->Ticks == 1)
 		{
+			auto isUsingController = *(bool*)0x0244DE98;
 			auto screenManager = (void*)0x05260F34;
+			const auto start_menu = 0x10084;
+
 			if (!UI_ScreenManager_AnyActiveScreens(screenManager, 0))
 			{
 				uiStartAction->Flags |= eActionStateFlagsHandled;
-				Patches::Ui::ShowDialog(0x10084, 0, 4, 0x1000C);
+				UI_PlaySound(7, -1);
+				Patches::Ui::ShowDialog(start_menu, 0, 4, 0x1000C);
+			}
+			else if (isUsingController)
+			{
+				auto screenWidget = UI_ScreenManager_GetScreenWidget(screenManager, 4, start_menu);
+				if (screenWidget)
+				{
+					uiStartAction->Flags |= eActionStateFlagsHandled;
+					UI_ScreenWidget_Close(screenWidget, 1);
+				}
 			}
 		}
 	}
@@ -189,6 +221,11 @@ namespace
 
 	void Hf2pTickHook()
 	{
+		const auto camera_update_scripted = (void(*)(int type, Blam::Math::RealVector3D *position,
+			Blam::Math::RealVector3D *orientation, float a4, __int16 a5, uint32_t objectIndex))(0x0072DD70);
+		const auto MatrixScale4x3_GetEulerAngles = (void(*)(Blam::Math::RealMatrix4x3 *matrix, Blam::Math::RealVector3D *outOrientation))(0x005B3670);
+		const auto sub_592320 = (void(*)(int a1))(0x592320);
+
 		static auto InPrematchState = (bool(*)(char state))(0x005523A0);
 		static auto UpdatePreMatchCamera = (bool(*)())(0x72D580);
 		static auto InitMpDirector = (void(*)())(0x0072D560);
@@ -197,68 +234,50 @@ namespace
 		static auto s_MatchStarted = false;
 		static auto s_TimerStarted = false;
 		static auto s_TimerLastTicked = 0;
+		static auto s_CameraObjectIndex = -1;
 
 		auto secondsUntilPlayerSpawn = GetSecondsRemainingUntilPlayerSpawn();
 
 		// update pre-match camera
 		if (InPrematchState(4))
 		{
-			if (!s_TimerStarted && secondsUntilPlayerSpawn > 0)
-			{
-				s_TimerStarted = true;
-				s_TimerLastTicked = Blam::Time::GetGameTicks();
-				Web::Ui::WebTimer::Start("startTimer", secondsUntilPlayerSpawn);
-			}
+			if (s_CameraObjectIndex == -1)
+				s_CameraObjectIndex = Forge::PrematchCamera::FindCameraObject();
 
-			s_MatchStarted = UpdatePreMatchCamera();
+			if (s_CameraObjectIndex != -1)
+			{
+				Blam::Math::RealMatrix4x3 cameraObjectTransform;
+				Blam::Math::RealVector3D cameraObjectOrientation;
+				Forge::GetObjectTransformationMatrix(s_CameraObjectIndex, &cameraObjectTransform);
+				MatrixScale4x3_GetEulerAngles(&cameraObjectTransform, &cameraObjectOrientation);
+
+
+				sub_592320(1);
+				camera_update_scripted(0, &cameraObjectTransform.Position, &cameraObjectOrientation, 0, 0, -1);
+			}
+			else
+			{
+				UpdatePreMatchCamera();
+			}
+			
+
+			s_MatchStarted = true;
 		}
 		else if (s_MatchStarted)
 		{
 			InitMpDirector();
 			s_MatchStarted = false;
-		}
-		else
-		{
-			if (!s_TimerStarted && secondsUntilPlayerSpawn > 0)
-			{
-				s_TimerStarted = true;
-				s_TimerLastTicked = Blam::Time::GetGameTicks();
-				Web::Ui::WebTimer::Start("respawnTimer", secondsUntilPlayerSpawn);
-			}
+			s_CameraObjectIndex = -1;
 		}
 
-		if (s_TimerStarted)
-		{
-			static auto s_LastTimerValue = 0;
-			auto secondsUntilSpawn = GetSecondsRemainingUntilPlayerSpawn();
-
-			if (secondsUntilSpawn != s_LastTimerValue)
-			{
-				s_LastTimerValue = secondsUntilSpawn;
-				s_TimerLastTicked = Blam::Time::GetGameTicks();
-				Web::Ui::WebTimer::Update(secondsUntilSpawn);
-
-				if (secondsUntilSpawn <= 0)
-				{
-					s_TimerStarted = false;
-					Web::Ui::WebTimer::End();
-				}
-			}
-
-			// TODO: find a better game ended indication
-			if (IsMapLoading())
-			{
-				s_TimerStarted = false;
-				Web::Ui::WebTimer::End();
-			}
-		}
+		SpawnTimerUpdate();
 
 		if (!IsMapLoading())
 		{
 			if (IsMainMenu())
 			{
 				// armour customizations on mainmenu
-				Patches::Armor::UpdateUiPlayerModelArmor();
+				Game::Armor::UpdateUiPlayerModelArmor();
 			}
 			else
 			{
@@ -281,6 +300,7 @@ namespace
 		switch (nameId)
 		{
 		case 0x4055: // control_settings
+			UI_PlaySound(3, -1); // A Button
 			CloseScreen(UI_GetScreenManager(), 0x10084);
 			Web::Ui::ScreenLayer::Show("settings", "{}");
 			return true;
@@ -315,37 +335,16 @@ namespace
 
 	void Hf2pLoadPreferencesHook()
 	{
-		// TODO: look into some of these functions further
-		static auto sub_50A190 = (void(__thiscall *)(void* thisptr))(0x50A190);
-		static auto sub_65C990 = (DWORD *(__thiscall*)(void* thisptr, int a2))(0x65C990);
-		static auto sub_50AD30 = (void(__cdecl*)(void* a1, void* a2))(0x50AD30);
-		static auto sub_50AC70 = (void(__cdecl*)(void* a1))(0x50AC70);
-		static auto sub_65CA30 = (void(__thiscall*)(void *thisptr))(0x65CA30);
-
 		const auto& moduleSettings = Modules::ModuleSettings::Instance();
 		const auto& moduleCamera = Modules::ModuleCamera::Instance();
 		const auto& moduleInput = Modules::ModuleInput::Instance();
 
+		const auto sub_50A520 = (void(*)())(0x0050A520);
+		sub_50A520();
+
 		Preferences* preferences = ElDorito::GetMainTls(0x18)[0];
 		if (!preferences)
 			return;
-
-		memset(preferences, 0, 0x42000u);
-		*(DWORD *)(preferences->Unknown20) = 0x33;
-		*(DWORD *)(preferences->Unknown20 + 0x24) = -1;
-		*(DWORD *)(preferences->Unknown20 + 0x28) = -1;
-		*(DWORD *)(preferences->Unknown20 + 0x34) = 0;
-		preferences->Unknown41BC0 = 1;
-		preferences->DisplaySubtitles = 0;
-		preferences->Unknown41BC8 = 0;
-		preferences->Unknown41BDC = 4;
-		preferences->Unknown41BD0 = 0;
-		preferences->Unknown41C6A = 1;
-
-		uint8_t osInfo[0x34];
-		sub_65C990(osInfo, preferences->Unknown41BC8);
-		sub_50AD30(osInfo, &preferences->Unknown41BDC); // display preferences
-		sub_50AC70(&preferences->ControlsMethod);
 
 		int screenResolutionWidth, screenResolutionHeight;
 		moduleSettings.GetScreenResolution(&screenResolutionWidth, &screenResolutionHeight);
@@ -365,7 +364,7 @@ namespace
 		preferences->MotionBlur = uint8_t(moduleSettings.VarMotionBlur->ValueInt);
 		preferences->VSync = uint8_t(moduleSettings.VarVSync->ValueInt);
 		preferences->Antialiasing = uint8_t(moduleSettings.VarAntialiasing->ValueInt);
-		preferences->ShowWatermark = uint8_t(moduleSettings.VarShadowQuality->ValueInt);
+		preferences->HideWatermark = 1;
 		preferences->MasterVolume = moduleSettings.VarMasterVolume->ValueInt;
 		preferences->SfxVolume = moduleSettings.VarSfxVolume->ValueInt;
 		preferences->MusicVolume = moduleSettings.VarMusicVolume->ValueInt;
@@ -382,14 +381,29 @@ namespace
 		preferences->MouseFilter = uint8_t(moduleSettings.VarMouseFilter->ValueInt);
 		preferences->InvertMouse = uint8_t(moduleSettings.VarInvertMouse->ValueInt);
 
-		memmove(ElDorito::GetMainTls(0x18)[0](0x42020), &preferences->Unknown00 + 0x20, 0x41DF0u);
-
-		sub_65CA30(osInfo); // osInfo dtor
-
 		preferences->Unknown00 = 1;
 		preferences->IsDirty = 1;
 
 		*(uint32_t*)ElDorito::GetMainTls(0x18)[0](0x8400C) = 1; // needed for dirtying
+	}
+
+	void ApplyDefaultScreenFx()
+	{
+		static const auto GetLocalPlayerUnitObjectIndex = (uint32_t(*)(int playerIndex))(0x00589CC0);
+		static const auto SpawnScreenEffect = (void(*)(uint32_t tagIndex, uint32_t unitObjectIndex, int a3, void* a4, void* a5))(0x683060);
+
+		auto scnrDefinitionPtr = (Blam::Tags::Scenario::Scenario**)0x022AAEB4;
+		if (!scnrDefinitionPtr)
+			return;
+
+		auto scnrDefinition = *scnrDefinitionPtr;
+		if (scnrDefinition->DefaultScreenFx.TagIndex == -1)
+			return;
+
+		auto unitObjectIndex = GetLocalPlayerUnitObjectIndex(*(uint32_t*)0x018BF52C);
+
+		uint8_t unk[0x3C] = { 0 };
+		SpawnScreenEffect(scnrDefinition->DefaultScreenFx.TagIndex, unitObjectIndex, 0, &unk, &unk);
 	}
 
 	void OnMapLoaded(const char* map)
@@ -400,6 +414,9 @@ namespace
 
 		const auto& mapStr = std::string(map);
 		const std::string mainmenu("mainmenu");
+
+		// this can be removed when we have scripts
+		ApplyDefaultScreenFx();
 
 		if (mapStr.length() >= mainmenu.length() && std::equal(mainmenu.rbegin(), mainmenu.rend(), mapStr.rbegin()))
 		{
@@ -414,5 +431,90 @@ namespace
 		{
 			*(float*)((*soundSystemPtr) + 0x44) = 1.0f;
 		}
+	}
+
+	void SpawnTimerUpdate()
+	{
+		const auto ui_play_sound = (void(*)(int index, uint32_t uise))(0x00AA5CD0);
+		const auto game_engine_round_in_progress = (bool(*)())(0x00550F90);
+
+		static auto lastBeep = 0;
+
+		Blam::Players::PlayerDatum *player{ nullptr };
+		auto playerIndex = Blam::Players::GetLocalPlayer(0);
+		if (playerIndex == Blam::DatumIndex::Null || !(player = Blam::Players::GetPlayers().Get(playerIndex)))
+			return;
+
+		auto secondsUntilSpawn = Pointer(player)(0x2CBC).Read<int>();
+		auto firstTimeSpawning = Pointer(player)(0x4).Read<uint32_t>() & 8;
+
+		if(game_engine_round_in_progress() || player->SlaveUnit == Blam::DatumIndex::Null)
+		{
+			if (secondsUntilSpawn != lastBeep && secondsUntilSpawn < 3)
+			{
+				lastBeep = secondsUntilSpawn;
+				ui_play_sound(13, -1);
+			}
+		}
+	}
+
+	bool SpawnTimerDisplayHook(int hudIndex, wchar_t* buff, int len, int a4)
+	{
+		const auto game_engine_round_in_progress = (bool(*)())(0x00550F90);
+		const auto sub_6E4AA0 = (bool(__cdecl *)(int a1, wchar_t *DstBuf, int bufflen, char a4))(0x6E4AA0);
+		if (sub_6E4AA0(hudIndex, buff, len, a4))
+			return true;
+		auto playerIndex = Blam::Players::GetLocalPlayer(0);
+		if (playerIndex == Blam::DatumIndex::Null)
+			return false;
+		auto player = Blam::Players::GetPlayers().Get(playerIndex);
+		if (!player)
+			return false;
+
+		auto secondsUntilSpawn = Pointer(player)(0x2CBC).Read<int>();
+		if (secondsUntilSpawn > 0)
+		{
+			if (!game_engine_round_in_progress())
+				return false;
+
+			auto firstTimeSpawning = Pointer(player)(0x4).Read<uint32_t>() & 8;
+
+			if(firstTimeSpawning)
+				swprintf(buff, L"Spawn in %d", secondsUntilSpawn);
+			else
+				swprintf(buff, L"Respawning in %d", secondsUntilSpawn);
+
+			return true;
+		}
+
+		return false;
+	}
+
+
+	void game_engine_tick_hook()
+	{
+		const auto game_get_current_engine = (void*(*)())(0x005CE150);
+		const auto game_engine_in_state = (bool(*)(uint8_t state))(0x005523A0);
+		auto engine = game_get_current_engine();
+		if (!engine)
+			return;
+
+		if (!game_engine_in_state(4))
+			(*(void(__thiscall **)(void*))(*(DWORD *)engine + 0x68))(engine);
+	}
+
+	int game_engine_get_delta_ticks_hook()
+	{
+		auto engineGobals = ElDorito::GetMainTls(0x48)[0];
+		if (!engineGobals)
+			return 0;
+
+		const auto &moduleServer = Modules::ModuleServer::Instance();
+
+		auto delta = (Blam::Time::GetGameTicks() - engineGobals(0xE10c).Read<int>()) - Blam::Time::SecondsToTicks(moduleServer.VarServerCountdown->ValueInt + 5.0f);
+		if (delta < 0)
+			delta = 0;
+
+		return delta;
 	}
 }

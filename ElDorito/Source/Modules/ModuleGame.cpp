@@ -8,9 +8,12 @@
 #include "../Patches/Logging.hpp"
 #include "../Blam/BlamTypes.hpp"
 #include "../Blam/BlamNetwork.hpp"
+#include "../Blam/BlamGraphics.hpp"
 #include "../Blam/Tags/Game/GameEngineSettings.hpp"
+#include "../Blam/Tags/Scenario/Scenario.hpp"
 #include "../Patches/Core.hpp"
 #include "../Patches/Forge.hpp"
+#include "../Patches/Maps.hpp"
 #include "../Web/WebRenderer.hpp"
 #include "../Web/Ui/ScreenLayer.hpp"
 #include "ModuleServer.hpp"
@@ -22,6 +25,8 @@
 #include "../ThirdParty/rapidjson/stringbuffer.h"
 #include "../ThirdParty/rapidjson/writer.h"
 #include <unordered_map>
+#include <codecvt>
+#include "../Blam/Tags/Camera/AreaScreenEffect.hpp"
 
 namespace
 {
@@ -209,6 +214,26 @@ namespace
 	bool CommandGameExit(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		Patches::Core::ExecuteShutdownCallbacks();
+		std::exit(0);
+		return true;
+	}
+
+	bool CommandGameRestart(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		Patches::Core::ExecuteShutdownCallbacks();
+
+		char *cmd = GetCommandLine();
+		int offset = 0;
+		//Seperate the *.exe from the arguments
+		if (cmd[offset] == '"')
+			while (cmd[++offset] != '"');
+		while (cmd[++offset] != ' ');
+
+		//Relaunch the game with the same arguments
+		auto str = static_cast<std::string>(GetCommandLine());
+		ShellExecuteA(nullptr, nullptr, str.substr(0, offset).c_str(), str.substr(offset).c_str(), nullptr, SW_SHOWNORMAL);
+
+		//Close the current instance
 		std::exit(0);
 		return true;
 	}
@@ -410,9 +435,7 @@ namespace
 			return false;
 
 		// Initialize an empty variant for the map
-		typedef void(__thiscall *InitializeMapVariantPtr)(uint8_t *outVariant, int mapId);
-		auto InitializeMapVariant = reinterpret_cast<InitializeMapVariantPtr>(0x581F70);
-		InitializeMapVariant(out, mapId);
+		Patches::Maps::InitializeMapVariant((Blam::MapVariant*)out, mapId);
 
 		// Make sure it actually loaded the map correctly by verifying that the
 		// variant is valid for the map
@@ -700,6 +723,36 @@ namespace
 		return true;
 	}
 
+	bool CommandGameLeave(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		auto session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished())
+		{
+			returnInfo = "Unable to leave the game!";
+			return false;
+		}
+
+		Blam::Network::LeaveGame();
+
+		returnInfo = "Leaving game...";
+		return true;
+	}
+
+	bool CommandGameEnd(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		auto session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished() || !session->IsHost())
+		{
+			returnInfo = "Unable to end the game!";
+			return false;
+		}
+
+		Blam::Network::EndGame();
+
+		returnInfo = "Ending game...";
+		return true;
+	}
+
 	bool CommandGameVersion(const std::vector<std::string>& arguments, std::string& returnInfo) {
 		returnInfo = Utils::Version::GetVersionString();
 		return true;
@@ -761,7 +814,7 @@ namespace
 		Web::Ui::ScreenLayer::Show(arguments[0].substr(0, pos - 1), buff.GetString());
 		return true;
 	}
-
+	
 	bool CommandListMedalPacks(const std::vector<std::string>& arguments, std::string& returnInfo)
 	{
 		Modules::ModuleGame::Instance().MedalPackList.clear();
@@ -777,7 +830,7 @@ namespace
 					std::string file = std::string(itr->path().generic_string());
 					file.append("\\events.json");
 					auto path = boost::filesystem::path(file);
-					if(boost::filesystem::exists(path))
+					if (boost::filesystem::exists(path))
 						Modules::ModuleGame::Instance().MedalPackList.push_back(itr->path().filename().string());
 				}
 			}
@@ -817,14 +870,190 @@ namespace
 		}
 
 		//Make sure the sound exists before playing
-		typedef void *(*GetTagAddressPtr)(int groupTag, uint32_t index);
-		auto GetTagAddressImpl = reinterpret_cast<GetTagAddressPtr>(0x503370);
-		if(GetTagAddressImpl('snd!', tagIndex) != nullptr)
+		if (Blam::Tags::TagInstance::IsLoaded('snd!', tagIndex))
 			Sound_PlaySoundEffect(tagIndex, 1.0f);
 		else
 			returnInfo = "Invalid sound index: " + arguments[0];
 
 		return true;
+	}
+
+	bool CommandPlayLoopingSound(const std::vector<std::string>& arguments, std::string& returnInfo)
+	{
+		static auto Sound_LoopingSound_Start = (void(*)(uint32_t sndTagIndex, int a2, int a3, int a4, char a5))(0x5DC530);
+
+		uint32_t tagIndex;
+		if (arguments.size() < 1 || !TryParseTagIndex(arguments[0], &tagIndex))
+		{
+			returnInfo = "Invalid arguments";
+			return false;
+		}
+
+		//Make sure the sound exists before playing
+		if (Blam::Tags::TagInstance::IsLoaded('lsnd', tagIndex))
+			Sound_LoopingSound_Start(tagIndex, -1, 1065353216, 0, 0);
+		else
+			returnInfo = "Invalid sound index: " + arguments[0];
+
+		return true;
+	}
+
+	bool CommandStopLoopingSound(const std::vector<std::string>& arguments, std::string& returnInfo)
+	{
+		static auto Sound_LoopingSound_Stop = (void(*)(uint32_t sndTagIndex, int a2))(0x5DC6B0);
+
+		uint32_t tagIndex;
+		if (arguments.size() < 1 || !TryParseTagIndex(arguments[0], &tagIndex))
+		{
+			returnInfo = "Invalid arguments";
+			return false;
+		}
+
+		//Make sure the sound exists before playing
+		if (Blam::Tags::TagInstance::IsLoaded('lsnd', tagIndex))
+			Sound_LoopingSound_Stop(tagIndex, -1);
+		else
+			returnInfo = "Invalid sound index: " + arguments[0];
+
+		return true;
+	}
+
+	bool CommandGameTakeScreenshot(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		wchar_t *path = Blam::Graphics::TakeScreenshot();
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> wstring_to_string;
+		std::string screenshot_path = wstring_to_string.to_bytes(path);
+
+		rapidjson::StringBuffer jsonBuffer;
+		rapidjson::Writer<rapidjson::StringBuffer> jsonWriter(jsonBuffer);
+		jsonWriter.StartObject();
+		jsonWriter.Key("filepath");
+		jsonWriter.String(screenshot_path.c_str());
+		jsonWriter.EndObject();
+		Web::Ui::ScreenLayer::Show("screenshot_notice", jsonBuffer.GetString());
+
+		returnInfo = "Screenshot saved to: " + screenshot_path;
+		return true;
+	}
+
+	bool CommandExecuteScenarioScript(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		static auto Scenario_ExecuteScript = (uint32_t(*)(int16_t scriptIndex, int scriptType, bool a3))(0x598050);
+
+		if (!Arguments.size())
+		{
+			returnInfo = "Expected script name";
+			return false;
+		}
+
+		if (*(uint8_t*)0x023917F0) //is loading
+		{
+			returnInfo = "Can not run script while in a loading screen";
+			return false;
+		}
+
+		auto scnr = Blam::Tags::Scenario::GetCurrentScenario();
+		if (!scnr)
+		{
+			returnInfo = "No scenario loaded";
+			return false;
+		}
+
+		for (auto i = 0; i < scnr->Scripts.Count; i++)
+		{
+			const auto& script = scnr->Scripts.Elements[i];
+
+			if (!stricmp(script.ScriptName, Arguments[0].c_str()))
+			{
+				if (Scenario_ExecuteScript(i, script.ScriptType, 0) == -1)
+				{
+					returnInfo = "Failed execution failed";
+					return false;
+				}
+				return true;
+			}
+		}
+
+		returnInfo = "Script not found";
+		return false;
+	}
+
+
+	bool CommandGetTagAddress(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (Arguments.size() <= 0)
+		{
+			returnInfo = "You must specify a tag index!";
+			return false;
+		}
+
+		int tagIndex = 0;
+		try
+		{
+			tagIndex = std::stoi(Arguments[0], 0, 0);
+		}
+		catch (std::invalid_argument)
+		{
+			returnInfo = "Invalid argument given.";
+			return false;
+		}
+
+		typedef void *(*GetTagAddressPtr)(int groupTag, uint32_t index);
+		auto GetTagAddressImpl = reinterpret_cast<GetTagAddressPtr>(0x503370);
+
+		void* address = GetTagAddressImpl(0, tagIndex);
+		std::stringstream ss;
+		ss << "Tag 0x" << std::hex << tagIndex << " is located at 0x" << std::hex << (int)address;
+		returnInfo = ss.str();
+		return true;
+	}
+
+
+	bool CommandScreenEffectRange(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (Arguments.size() < 2)
+		{
+			returnInfo = "You must include an index and a range!";
+			return false;
+		}
+
+		int index = 0;
+		float range = 0;
+		try
+		{
+			index = std::stoi(Arguments[0], 0, 0);
+			range = std::stof(Arguments[1]);
+		}
+		catch (std::invalid_argument)
+		{
+			returnInfo = "Invalid argument given.";
+			return false;
+		}
+
+		auto scnr = Blam::Tags::Scenario::GetCurrentScenario();
+		if (!scnr)
+		{
+			returnInfo = "A scenario must be loaded!";
+			return false;
+		}
+
+		auto sefcIndex = scnr->DefaultScreenFx;
+		if(!sefcIndex)
+		{
+			returnInfo = "Current scenario does not have a default screen fx";
+			return false;
+		}
+
+		auto sefc = Blam::Tags::TagInstance(sefcIndex.TagIndex).GetDefinition<Blam::Tags::AreaScreenEffect>('sefc');
+		if(sefc)
+		{
+			sefc->ScreenEffect2[index].MaximumDistance = range;
+			return true;
+		}
+
+		returnInfo = "Failed to get sefc";
+		return false;
+
 	}
 
 	bool VariableLanguageUpdated(const std::vector<std::string>& arguments, std::string& returnInfo)
@@ -852,6 +1081,15 @@ namespace
 			return false;
 
 		*(uint32_t*)0x189DEE4 = it->second;
+		return true;
+	}
+
+	bool CommandShowFPS(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		float current_fps = Pointer(0x22B47F8).Read<float>(); // for future use
+
+		Pointer &show_fps = Pointer(0x22B47FC);
+		show_fps.WriteFast<bool>(!show_fps.Read<bool>());
 		return true;
 	}
 
@@ -883,6 +1121,8 @@ namespace Modules
 
 		AddCommand("Exit", "exit", "Ends the game process", eCommandFlagsNone, CommandGameExit);
 
+		AddCommand("Restart", "restart", "Restart the game process", eCommandFlagsNone, CommandGameRestart);
+
 		AddCommand("ForceLoad", "forceload", "Forces a map to load", eCommandFlagsNone, CommandGameForceLoad, { "mapname(string) The name of the map to load", "gametype(int) The gametype to load", "gamemode(int) The type of gamemode to play", });
 
 		AddCommand("ShowUI", "show_ui", "Attempts to force a UI widget to open", eCommandFlagsNone, CommandGameShowUI, { "dialogID(int) The dialog ID to open", "arg1(int) Unknown argument", "flags(int) Unknown argument", "parentdialogID(int) The ID of the parent dialog" });
@@ -893,11 +1133,15 @@ namespace Modules
 
 		AddCommand("Start", "start", "Starts or restarts the game", eCommandFlagsNone, CommandGameStart);
 
+		AddCommand("End", "end", "Ends the game", eCommandFlagsNone, CommandGameEnd);
+
 		AddCommand("Stop", "stop", "Stops the game, goes back to lobby", eCommandFlagsNone, CommandGameStop);
+
+		AddCommand("Leave", "leave", "Leaves the game, goes back to menu", eCommandFlagsNone, CommandGameLeave);
 
 		AddCommand("Version", "version", "Displays the game's version", eCommandFlagsNone, CommandGameVersion);
 
-		AddCommand("SetMenuEnabled", "set_menu", "Sets whether the server browser is currently open", eCommandFlagsNone, CommandGameSetMenuEnabled);
+		AddCommand("SetMenuEnabled", "set_menu", "Sets whether the server browser is currently open", eCommandFlagsRunOnMainMenu, CommandGameSetMenuEnabled);
 
 		AddCommand("ListMaps", "maps", "List all available map files", eCommandFlagsNone, CommandListMaps);
 
@@ -906,6 +1150,20 @@ namespace Modules
 		AddCommand("ListMedalPacks", "list_medals", "List all available medal packs", eCommandFlagsNone, CommandListMedalPacks);
 
 		AddCommand("PlaySound", "play_sound", "Plays a sound effect", CommandFlags(eCommandFlagsHidden | eCommandFlagsOmitValueInList), CommandPlaySound);
+
+		AddCommand("PlayLoopingSound", "play_looping_sound", "Plays a looping sound effect", CommandFlags(eCommandFlagsHidden | eCommandFlagsOmitValueInList), CommandPlayLoopingSound);
+
+		AddCommand("StopLoopingSound", "stop_looping_sound", "Stops a looping sound effect", CommandFlags(eCommandFlagsHidden | eCommandFlagsOmitValueInList), CommandStopLoopingSound);
+
+		AddCommand("TakeScreenshot", "take_screenshot", "Take a screenshot", eCommandFlagsNone, CommandGameTakeScreenshot);
+
+		AddCommand("ScenarioScript", "scnr_script", "Executes a scenario script", eCommandFlagsNone, CommandExecuteScenarioScript);
+
+		AddCommand("TagAddress", "tag_address", "Gets the address of a tag in memory", eCommandFlagsNone, CommandGetTagAddress);
+
+		AddCommand("ScreenEffectRange", "sefc_range", "Set the range of the default screen FX in the current scnr", eCommandFlagsNone, CommandScreenEffectRange, { "Index(int) sefc effect index", "Range(float) effect range" });
+
+		AddCommand("ShowFPS", "show_fps", "Toggle the on-screen FPS info", (CommandFlags)(eCommandFlagsOmitValueInList | eCommandFlagsHidden), CommandShowFPS);
 
 		VarMenuURL = AddVariableString("MenuURL", "menu_url", "url(string) The URL of the page you want to load inside the menu", eCommandFlagsArchived, "http://scooterpsu.github.io/");
 
@@ -943,14 +1201,15 @@ namespace Modules
 		VarSuppressJuggling->ValueIntMin = 0;
 		VarSuppressJuggling->ValueIntMax = 1;
 
-		VarFixHudGlobals = AddVariableInt("FixHudGlobals", "fix_hud_globals", "Use the correct hud globals for the player representation", eCommandFlagsArchived, 0);
-
 		VarHideH3UI = AddVariableInt("HideH3UI", "hide_h3ui", "Hide the H3 UI", eCommandFlagsHidden, 0);
 		VarHideH3UI->ValueIntMin = 0;
 		VarHideH3UI->ValueIntMax = 1;
 
-		// Level load patch
-		Patch::NopFill(Pointer::Base(0x2D26DF), 5);
+		VarScreenshotsFolder = AddVariableString("ScreenshotsFolder", "screenshots_folder", "The location where the game will save screenshots", eCommandFlagsArchived, "%userprofile%\\Pictures\\Screenshots\\blam");
+
+		VarCefMedals = AddVariableInt("CefMedals", "cef_medals", "Enable/disable cef medals. When disabled fallback to the H3 medal system.", eCommandFlagsArchived, 1);
+
+		VarFpsLimiter = AddVariableInt("FPSLimiter", "fps_limiter", "Enable/disable framerate limiter (improves frame timing at the cost of cpu usage)", eCommandFlagsArchived, 1);
 
 		/*EXAMPLES: adds a variable "Game.Name", default value ElDewrito, calls VariableGameNameUpdate when value is updated
 		AddVariableString("Name", "gamename", "Title of the game", "ElDewrito", VariableGameNameUpdate);

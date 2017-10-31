@@ -1,5 +1,6 @@
 #include "ModuleInput.hpp"
 #include <sstream>
+#include <algorithm>
 #include "../ElDorito.hpp"
 #include "../Patches/Input.hpp"
 #include "../Console.hpp"
@@ -47,10 +48,10 @@ namespace
 	{
 		memset(&bindings, 0, sizeof(bindings));
 
-		bindings.ControllerSensitivityX = 150.f;
-		bindings.ControllerSensitivityY = 90.f;
-		bindings.Unknown200 = .8f;
-		bindings.Unknown204 = 1.f;
+		bindings.ControllerSensitivityX = 120;
+		bindings.ControllerSensitivityY = 60;
+		bindings.FlyingCameraSpeed = .8f;
+		bindings.FlyingCameraThrust = 1.f;
 
 		// Set all bindings to "none"
 		for (auto i = 0; i < eGameAction_KeyboardMouseCount; i++)
@@ -101,8 +102,8 @@ namespace
 		bindings.ControllerButtons[eGameActionVehicleFire]    = eControllerButtonRightTrigger;
 		bindings.ControllerButtons[eGameActionVehicleAltFire] = eControllerButtonLeftTrigger;
 		bindings.ControllerButtons[eGameActionMeleeFire]      = eControllerButtonB;
-		bindings.ControllerButtons[eGameActionUnk56]          = eControllerButtonDpadDown;
-		bindings.ControllerButtons[eGameActionUnk57]          = eControllerButtonDpadUp;
+		bindings.ControllerButtons[eGameActionNextPlayer]     = eControllerButtonDpadDown;
+		bindings.ControllerButtons[eGameActionPrevPlayer]     = eControllerButtonDpadUp;
 		bindings.ControllerButtons[eGameActionUnk58]          = eControllerButtonA;
 		bindings.ControllerButtons[eGameActionUseConsumable1] = eControllerButtonLeftBumper;
 		bindings.ControllerButtons[eGameActionUiStart]        = eControllerButtonStart;
@@ -162,8 +163,8 @@ namespace
 		bindings.PrimaryMouseButtons[eGameActionVehicleAltFire]  = eMouseButtonRight;
 		bindings.PrimaryKeys[eGameActionMeleeFire]               = eKeyCodeQ;
 		bindings.SecondaryKeys[eGameActionMeleeFire]             = eKeyCodeV;
-		bindings.PrimaryKeys[eGameActionUnk56]                   = eKeyCodeD;
-		bindings.PrimaryKeys[eGameActionUnk57]                   = eKeyCodeA;
+		bindings.PrimaryKeys[eGameActionNextPlayer]              = eKeyCodeD;
+		bindings.PrimaryKeys[eGameActionPrevPlayer]              = eKeyCodeA;
 		bindings.PrimaryKeys[eGameActionUnk58]                   = eKeyCodeSpace;
 		bindings.PrimaryKeys[eGameActionMoveForward]             = eKeyCodeW;
 		bindings.SecondaryKeys[eGameActionMoveForward]           = eKeyCodeUp;
@@ -510,6 +511,15 @@ namespace
 		Modules::ModuleInput::UpdateBindings();
 		return true;
 	}
+
+	bool VariableControllerStickLayoutUpdated(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		auto layout = Modules::ModuleInput::Instance().VarControllerStickLayout->ValueInt;
+		bindings.JoystickLayout = layout;
+		Modules::ModuleInput::UpdateBindings();
+		return true;
+	}
+
 	bool CommandDumpBindingsJson(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		returnInfo = "";
@@ -576,6 +586,8 @@ namespace
 			returnInfo = "Not enough arguments";
 			return false;
 		}
+		std::string search_for = Arguments[0];
+		std::transform(search_for.begin(), search_for.end(), search_for.begin(), ::tolower);
 		rapidjson::StringBuffer buffer;
 		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 
@@ -584,7 +596,9 @@ namespace
 		{
 			for (int k = 0; k < commandBindings[i].command.size(); k++)
 			{
-				if (commandBindings[i].command[k].compare(Arguments[0]) == 0)
+				std::string command_part = commandBindings[i].command[k];
+				std::transform(command_part.begin(), command_part.end(), command_part.begin(), ::tolower);
+				if (command_part.compare(search_for) == 0)
 				{
 					std::string key;
 					keyCodes.FindName((Blam::Input::KeyCode)i, &key);
@@ -624,6 +638,21 @@ namespace
 		return true;
 	}
 #endif
+
+	bool TryParseFloat(const char* str, float* value)
+	{
+		char* endp;
+		*value = std::strtod(str, &endp);
+		return endp != str;
+	}
+
+	bool CommandControllerVibrationTest(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		float duration = 0.5f;
+		Arguments.size() > 0 && TryParseFloat(Arguments[0].c_str(), &duration);
+		Patches::Input::TestControllerVibration(duration);
+		return true;
+	}
 }
 
 namespace Modules
@@ -654,6 +683,16 @@ namespace Modules
 		AddCommand("FindBind", "findbind", "Finds the key bound to a command passed", eCommandFlagsNone, CommandFindKeybdBinding);
 		VarControllerSensitivityX = AddVariableFloat("ControllerSensitivityX", "xsens", "Horizontal controller look sensitivity", eCommandFlagsArchived, 120, VariableControllerSensitivityXUpdated);
 		VarControllerSensitivityY = AddVariableFloat("ControllerSensitivityY", "ysens", "Vertical controller look sensitivity", eCommandFlagsArchived, 60, VariableControllerSensitivityYUpdated);
+
+		VarControllerVibrationIntensity = AddVariableFloat("ControllerVibrationIntensity", "vibration", "Controls the controller vibration intensity", eCommandFlagsArchived, 1.0f);
+		VarControllerVibrationIntensity->ValueFloatMin = 0.0f;
+		VarControllerVibrationIntensity->ValueFloatMax = 1.0f;
+		AddCommand("ControllerVibrationTest", "vibration_test", "Test the controller vibration", eCommandFlagsNone, CommandControllerVibrationTest);
+
+		VarControllerStickLayout = AddVariableInt("ControllerStickLayout", "stick_layout", "Controller stick layout", eCommandFlagsArchived, 0, VariableControllerStickLayoutUpdated);
+		VarControllerStickLayout->ValueIntMin = 0;
+		VarControllerStickLayout->ValueIntMax = 3;
+
 		VarSpectateSensitivity = AddVariableFloat("SpectateSensitivity", "specsens", "Spectator camera sensitivity", eCommandFlagsArchived, 1.0f);
 
 		VarControllerInvertY = AddVariableInt("ControllerInvertY", "yinvert", "Invert the controller Y look axis", eCommandFlagsArchived, 0);
@@ -662,14 +701,10 @@ namespace Modules
 
 		VarToggleSprint = AddVariableInt("ToggleSprint", "toggle_sprint", "Sprint toggle enabled (1) or disabled (0)", eCommandFlagsArchived, 0);
 
+		VarTapScoreboard = AddVariableInt("TapScoreboard", "tap_scoreboard", "Enable/disable double tap to lock scoreboard", eCommandFlagsArchived, 1);
+
 		LoadDefaultBindings();
 		BuildSettingsMenu();
-
-		// Default command bindings (TODO: port bind saving code from recode)
-		commandBindings[eKeyCodeA].command = { "ui_btn_press", "0" };      // A
-		commandBindings[eKeyCodeB].command = { "ui_btn_press", "1" };      // B
-		commandBindings[eKeyCodeEnd].command = { "ui_btn_press", "1" };    // B
-		commandBindings[eKeyCodeHome].command = { "ui_btn_press", "2" };   // X
 	}
 
 	BindingsTable* ModuleInput::GetBindings()
@@ -737,7 +772,41 @@ namespace Modules
 				result += " \"" + secondaryName + "\"";
 			result += "\n";
 		}
+
+		for (auto i = 0; i < eKeyCode_Count; i++)
+		{
+			const auto binding = &commandBindings[i];
+			if (binding->command.size() == 0)
+				continue; // Key is not bound
+			std::string key_name;
+			std::string line;
+			keyCodes.FindName(static_cast<KeyCode>(i), &key_name);
+			std::string prefix = "";
+			if (binding->isHold)
+				prefix = "+";
+			line += "bind " + key_name + " " + prefix;
+			for (std::string command : binding->command)
+			{
+				line += command + " ";
+			}
+			line.erase(line.find_last_not_of(" \n\r\t") + 1);
+			result += line + "\n";
+		}
 		return result;
+	}
+	bool ModuleInput::IsCommandBound(std::string command)
+	{
+		for (int i = 0; i < eKeyCode_Count; i++)
+		{
+			const auto binding = &commandBindings[i];
+			if (binding->command.size() == 0)
+				continue; // Key is not bound
+			std::string bound_command = binding->command[0];
+			std::transform(bound_command.begin(), bound_command.end(), bound_command.begin(), ::tolower);
+			if (command.compare(bound_command) == 0)
+				return true;
+		}
+		return false;
 	}
 }
 
@@ -921,10 +990,28 @@ namespace
 		// UI
 		{ "Menu", eGameActionUiStart },
 		{ "Scoreboard", eGameActionUiSelect },
-		{ "ForgeDelete", eGameActionUiY },
+
 		{ "Chat", eGameActionGeneralChat },
 		{ "TeamChat", eGameActionTeamChat },
 		{ "VoiceChat", eGameActionVoiceChat },
+		{ "UiLeftTrigger", eGameActionUiLeftTrigger },
+		{ "UiRightTrigger", eGameActionUiRightTrigger },
+		{ "UiUp", eGameActionUiUp },
+		{ "UiDown", eGameActionUiDown },
+		{ "UiLeft", eGameActionUiLeft },
+		{ "UiRight", eGameActionUiRight },
+		{ "UiLeftStick", eGameActionUiLeftStick },
+		{ "UiRightStick", eGameActionUiRightStick },
+		{ "UiA", eGameActionUiA },
+		{ "UiB", eGameActionUiB },
+		{ "UiX", eGameActionUiX },
+		{ "UiY", eGameActionUiY },
+		{ "UiLeftBumper", eGameActionUiLeftBumper },
+		{ "UiRightBumper", eGameActionUiRightBumper },
+
+		// Observer 
+		{ "NextPlayer", eGameActionNextPlayer },
+		{ "PrevPlayer", eGameActionPrevPlayer },
 	};
 
 	// Macro to prefix a string with "settings_" because the actual string_ids don't include that prefix

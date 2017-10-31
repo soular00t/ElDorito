@@ -36,6 +36,14 @@ namespace Patches::Input
 		// pumped. If this returns false, the input context will be
 		// deactivated.
 		virtual bool UiInputTick() = 0;
+
+		//Called before GameInputTick() and UiInputTick()
+		virtual void InputBlock() { memset(reinterpret_cast<bool*>(0x238DBEB), 1, Blam::Input::InputType::eInputType_Count); }
+		//Called after GameInputTick() and UiInputTick()
+		virtual void InputUnblock() { memset(reinterpret_cast<bool*>(0x238DBEB), 0, Blam::Input::InputType::eInputType_Count); };
+
+		//If the Input context should allow the registered handlers to still fire
+		bool allowHandlers = false;
 	};
 
 	// Pushes a new context onto the input context stack, deactivating the
@@ -43,8 +51,8 @@ namespace Patches::Input
 	// becomes deactivated, the previous context will be re-activated.
 	void PushContext(std::shared_ptr<InputContext> context);
 
-	typedef std::function<void()> DefaultInputHandler;
-	typedef std::function<void()> MenuUIInputHandler;
+	using DefaultInputHandler = void(*)();
+	using MenuUIInputHandler = void(*)();
 		
 	// Registers a function to be called when the default input handler is
 	// ticked.
@@ -55,4 +63,6 @@ namespace Patches::Input
 	void SetKeyboardSettingsMenu(
 		const std::vector<Blam::Input::ConfigurableAction> &infantrySettings,
 		const std::vector<Blam::Input::ConfigurableAction> &vehicleSettings);
+
+	void TestControllerVibration(float duration);
 }

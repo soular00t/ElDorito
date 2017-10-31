@@ -2,13 +2,26 @@ var locked = false;
 var isHost = false;
 var cardOpacity = 0.9;
 var medalsPath = 'medals://';
-capturedInput = false;
 var imageFormat = 'svg';
 var itemNumber = 0;
 var controllerType;
 var hasGP = false;
 var talkingArray = [];
-var volArray = [];
+var pageWidth, pageHeight;
+var basePage = {
+  width: 1280,
+  height: 720,
+  scale: 1,
+  scaleX: 1,
+  scaleY: 1
+};
+var isVisible = false;
+var lobbyJSON;
+var expandedScoreboard;
+var axisThreshold = .5;
+var stickTicks = { left: 0, right: 0, up: 0, down: 0 };
+var repGP;
+var lastHeldUpdated = 0;
 
 var teamArray = [
     {name: 'red', color: '#620B0B'},
@@ -153,7 +166,34 @@ var medalDetails = [
     {name:'Headshot!', 'string':'headshot', 'desc':'Kill an enemy with a headshot.'}
 ];
 
-$(window).load(function(){
+$(function(){
+    var $page = $('.page_content');
+
+    getPageSize();
+    scalePages($page, pageWidth, pageHeight);
+  
+    $(window).resize(function() {
+        getPageSize();            
+        scalePages($page, pageWidth, pageHeight);
+    });
+  
+    function getPageSize() {
+        pageHeight = $('#container').height();
+        pageWidth = $('#container').width();
+    }
+
+    function scalePages(page, maxWidth, maxHeight) {            
+        var scaleX = 1, scaleY = 1;                      
+        scaleX = maxWidth / basePage.width;
+        scaleY = maxHeight / basePage.height;
+        basePage.scaleX = scaleX;
+        basePage.scaleY = scaleY;
+        basePage.scale = (scaleX > scaleY) ? scaleY : scaleX;
+        page.attr('style', '-webkit-transform:scale(' + basePage.scale + ');');
+    }
+});
+
+$(document).ready(function(){
     $(document).keyup(function (e) {
         if (e.keyCode === 27) {
             if($('#playerBreakdown').is(":visible")){
@@ -162,11 +202,12 @@ $(window).load(function(){
                dew.hide(); 
             }
         }
+        if (e.keyCode == 44) {
+            dew.command('Game.TakeScreenshot');  
+        }
     });
     $(document).keydown(function(e){
         if(e.keyCode == 9|| e.keyCode == 13){
-            $('#playerBreakdown').hide();
-            dew.captureInput(false);
             dew.hide();
         } 
         if(e.keyCode == 84 || e.keyCode == 89){
@@ -183,13 +224,13 @@ $(window).load(function(){
         callback: function(key, options){
             switch(key){
                 case "kick":
-                    dew.command("Server.KickUid " + flipUID($(this).attr('data-uid')));
+                    dew.command("Server.KickUid " + $(this).attr('data-uid'));
                     break;
                 case "ban":
-                    dew.command("Server.KickBanUid " + flipUID($(this).attr('data-uid')));
+                    dew.command("Server.KickBanUid " + $(this).attr('data-uid'));
                     break;
                 case "mute":
-                    console.log($(this).attr('id'),$(this).attr('data-uid')); //VOIP: replace with mute command
+                    setPlayerVolume($(this).attr('id'),$(this).attr('data-uid'),0);
                     break;
                 default:
                     console.log(key + " " + $(this).attr('data-name') + " " + $(this).attr('data-uid'));
@@ -213,88 +254,175 @@ $(window).load(function(){
             }
         }
     });
-    dew.on('controllerinput', function(e){       
-        if(hasGP){
-            if(e.data.A == 1){
-                if(!$('#playerBreakdown').is(":visible")){
-                    var playerName = $('.clickable').eq(itemNumber).attr('id');
-                    playerBreakdown(playerName);
-                }
+    $('#closeButton').on('click', function(e){
+        dew.hide();
+    });
+});
+
+dew.on('controllerinput', function(e){     
+    if(hasGP){
+        if(e.data.A == 1){
+            if(!$('#playerBreakdown').is(":visible")){
+                var playerName = $('.clickable').eq(itemNumber).attr('id');
+                playerBreakdown(playerName);
             }
-            if(e.data.B == 1){
-                if($('#playerBreakdown').is(":visible")){
-                    $('#playerBreakdown').hide();
-                } else {
-                   dew.hide(); 
-                }
-            }
-            if(e.data.Up == 1){
-                upNav();
-            }
-            if(e.data.Down == 1){
-                downNav();
-            }
-            if(e.data.LeftBumper == 1){
-                if($('#playerBreakdown').is(":visible")){
-                    $('#previousPlayer').click();
-                }
-            }
-            if(e.data.RightBumper == 1){
-                if($('#playerBreakdown').is(":visible")){
-                    $('#nextPlayer').click();
-                }
-            }
-            if(e.data.Start == 1){
+        }
+        if(e.data.B == 1){
+            if($('#playerBreakdown').is(":visible")){
                 $('#playerBreakdown').hide();
-                dew.hide();
+            } else {
+               dew.hide(); 
             }
+        }
+        if(e.data.X == 1){
+            if(!$('#playerBreakdown').is(":visible")){
+                setPlayerVolume($('.clickable').eq(itemNumber).attr('id'),$('.clickable').eq(itemNumber).attr('data-uid'),0);
+            }
+        }
+        if(e.data.Up == 1){
+            upNav();
+        }
+        if(e.data.Down == 1){
+            downNav();
+        }
+        if(e.data.LeftBumper == 1){
+            if($('#playerBreakdown').is(":visible")){
+                $('#previousPlayer').click();
+            }
+        }
+        if(e.data.RightBumper == 1){
+            if($('#playerBreakdown').is(":visible")){
+                $('#nextPlayer').click();
+            }
+        }
+        if(e.data.Select == 1){
+            dew.hide();
+        }
+        if(e.data.AxisLeftY > axisThreshold){
+            stickTicks.up++;
+        }else{
+            stickTicks.up = 0;
+        }
+        if(e.data.AxisLeftY < -axisThreshold){
+            stickTicks.down++;
+        }else{
+            stickTicks.down = 0;
+        }
+    }
+});
+
+dew.on("scoreboard", function(e){
+    if(isVisible){
+        displayScoreboard();
+    }
+});
+
+dew.on("voip-user-volume", function(e){
+	//console.log(e);
+	if(e.data.volume > -60){
+		talkingArray.push(e.data.user);
+        isSpeaking(e.data.user,true);
+	}else{
+		talkingArray.splice($.inArray(e.data.user, talkingArray), 1);
+        isSpeaking(e.data.user,false);
+	
+	/*if(isVisible)
+		displayScoreboard();
+    */
+    }
+	
+	var uid = "";
+	var level = 100;
+	$.grep(volArray, function (result, index) {
+	    if (result) {
+	        if (result[0] == e.data.user) {
+	            uid = result[1];
+	            level = result[2];
+	            if (level == 0) {
+	                $('#' + ownName).find('.speaker').attr('src', 'dew://assets/emblems/speaker-mute.png');
+	            } else if (e.data.volume < -75) {
+	                $('#' + e.data.user).find('.speaker').attr('src', 'dew://assets/emblems/speaker-off.png');
+	            } else if (e.data.volume < -50) {
+	                $('#' + e.data.user).find('.speaker').attr('src', 'dew://assets/emblems/speaker-low.png');
+	            } else {
+	                $('#' + e.data.user).find('.speaker').attr('src', 'dew://assets/emblems/speaker-full.png');
+	            };
+	            volArray.splice(index, 1);
+	        };
+	    }
+	});
+	volArray.push([e.data.user, uid, level, e.data.volume]);
+});
+
+dew.on("voip-self-volume", function (e) {
+    dew.getSessionInfo().then(function (info) {
+        if (info.established == true) {
+            var level = 100;
+            $.grep(volArray, function (result, index) {
+                if (result) {
+                    if (result[0] == info.playerInfo.Name) {
+                        uid = result[1];
+                        level = result[2];
+                        if (level == 0) {
+                            $('#' + info.playerInfo.Name).find('.speaker').attr('src', 'dew://assets/emblems/speaker-mute.png');
+                        } else if (e.data.volume < -75) {
+                            $('#' + info.playerInfo.Name).find('.speaker').attr('src', 'dew://assets/emblems/speaker-off.png');
+                        } else if (e.data.volume < -50) {
+                            $('#' + info.playerInfo.Name).find('.speaker').attr('src', 'dew://assets/emblems/speaker-low.png');
+                        } else {
+                            $('#' + info.playerInfo.Name).find('.speaker').attr('src', 'dew://assets/emblems/speaker-full.png');
+                        };
+                        volArray.splice(index, 1);
+                    };
+                }
+            });
+            volArray.push([info.playerInfo.Name, info.playerInfo.Uid, level, e.data.volume]);
         }
     });
 });
 
-dew.on("scoreboard", function(e){
-    dew.command('Game.ExpandedScoreboard', {}).then(function(response){
-        displayScoreboard(response);
-    });
+dew.on("voip-peers", function(e){
 });
 
-dew.on("voip-user-volume", function(e){
-});
-
-dew.on("voip-speaking", function(e){ 
-    if(e.data.isSpeaking){
-        talkingArray.push(e.data.user);
-    }else{
-        talkingArray.splice($.inArray(e.data.user, talkingArray),1);
-    }
-    dew.command('Game.ExpandedScoreboard', {}).then(function(response){
-        displayScoreboard(response);
-    });
-});
-
-dew.on("voip-ptt", function(e){
-    dew.command('VoIP.PTT_Enabled', {}).then(function(x){
-        if(x == 1){
-            dew.command('Player.Name', {}).then(function(n){
-                if(e.data.talk == 1){
-                    talkingArray.push(n);
-                }else{
-                    talkingArray.splice($.inArray(n, talkingArray),1);
-                }
-                dew.command('Game.ExpandedScoreboard', {}).then(function(response){
-                    displayScoreboard(response);
-                });
-            });
-        }      
-    })
+dew.on("voip-speaking", function(e){
 });
 
 dew.on("show", function(e){
+    isVisible = true;
+    dew.captureInput(e.data.locked);
     locked = e.data.locked;
-    dew.captureInput(locked);
-    capturedInput = locked;
-    if(locked){
+    if(e.data.locked){
         $('#closeButton').show();
+        dew.command('Game.MedalPack', {}).then(function(response){
+            medalsPath = "medals://" + response + "/";
+            $.getJSON(medalsPath+'events.json', function(json) {
+                eventJson = json;
+                if(eventJson['settings']){
+                    if(eventJson['settings'].hasOwnProperty('imageFormat')){
+                        imageFormat = eventJson['settings'].imageFormat;
+                    }
+                }            
+            });
+        });
+        dew.command('Settings.Gamepad', {}).then(function(result){
+            if(result == 1){
+                onControllerConnect();
+                hasGP = true;
+                if(!repGP){
+                    repGP = window.setInterval(checkGamepad,1000/60);
+                }
+            }else{
+                onControllerDisconnect();
+                hasGP = false;
+                if(repGP){
+                    window.clearInterval(repGP);
+                    repGP = null;
+                }
+            }
+        });
+        dew.command('Server.ListPlayersJSON').then(function(res){
+            lobbyJSON = JSON.parse(res);
+        });
     }else{
         $('#closeButton').hide();
     }
@@ -304,34 +432,21 @@ dew.on("show", function(e){
         $('#winnerText').hide();
     }
     dew.command('Game.ExpandedScoreboard', {}).then(function(response){
-        displayScoreboard(response);
-    });
-    dew.command('Game.MedalPack', {}).then(function(response){
-        medalsPath = "medals://" + response + "/";
-        $.getJSON(medalsPath+'events.json', function(json) {
-            eventJson = json;
-            if(eventJson['settings']){
-                if(eventJson['settings'].hasOwnProperty('imageFormat')){
-                    imageFormat = eventJson['settings'].imageFormat;
-                }
-            }            
+        dew.getSessionInfo().then(function(i){
+            expandedScoreboard = response;
+            isHost = i.isHost;
+            displayScoreboard();
         });
-    });
-    dew.command('Settings.Gamepad', {}).then(function(result){
-        if(result == 1){
-            onControllerConnect();
-            hasGP = true;
-        }else{
-            onControllerDisconnect();
-            hasGP = false;
-        }
     });
 });
 
-function displayScoreboard(expandedScoreboard){
-    dew.getSessionInfo().then(function(i){
-        isHost = i.isHost;
-    });
+dew.on("hide", function(e){
+    isVisible = false;
+    $('#playerBreakdown').hide();    
+    dew.captureInput(false);
+});
+
+function displayScoreboard(){
     dew.getScoreboard().then(function (e){ 
         var scoreboardheader = '<th></th><th class="name">Players</th>';
         if(locked || (expandedScoreboard == 1)){
@@ -358,7 +473,7 @@ function displayScoreboard(expandedScoreboard){
         } else {
             $('#window').css({'width':'38%','left':'31%'});
         }
-        scoreboardheader += '<th>Score</th>'; 
+        scoreboardheader += '<th></th><th>Score</th>'; 
         $('#header').html(scoreboardheader);
         buildScoreboard(e.players, e.hasTeams, e.teamScores, e.gameType, JSON.parse(e.playersInfo),expandedScoreboard, e.teamHasObjective);
     });
@@ -372,6 +487,7 @@ function displayScoreboard(expandedScoreboard){
 
 function buildScoreboard(lobby, teamGame, scoreArray, gameType, playersInfo,expandedScoreboard, objectiveArray){
     var emblemPath;
+	var rankPath = "dew://assets/ranks/0.png"
     var where = '#singlePlayers';
     if(lobby.length > 0){
         $('#singlePlayers').empty();
@@ -407,11 +523,17 @@ function buildScoreboard(lobby, teamGame, scoreArray, gameType, playersInfo,expa
                 }).mouseout(function(){
                     col = $(this).attr('data-color');
                     $(this).css("background-color", hexToRgb(col, cardOpacity));
-                })
-                .append($('<td class="rank">'))
+                }).click(function(){
+                    var playerName = $(this).attr('id');
+                    playerBreakdown(playerName);
+                }).append($('<td class="rank">'))
                 .append($('<td class="name">').text(lobby[i].name)) //name
             );   
+			if(playersInfo[lobby[i].playerIndex]){
+				rankPath = "dew://assets/ranks/" + playersInfo[lobby[i].playerIndex].r + ".png";
+			}
             if(lobby[i].isAlive){
+				
                 if(lobby[i].isHost){
                     emblemPath = 'dew://assets/emblems/crown.png';
                 }else{
@@ -430,24 +552,24 @@ function buildScoreboard(lobby, teamGame, scoreArray, gameType, playersInfo,expa
                     case "oddball":
                         $("[data-playerIndex='" + lobby[i].playerIndex + "']").append($('<td class="stat">').text(lobby[i].kills)) //kills
                             .append($('<td class="stat">').text(lobby[i].ballKills)) //ball kills
-                        $('.teamHeader .name').attr('colspan',3);
+                        $('.teamHeader .name').attr('colspan',4);
                         break;
                     case "infection":
                         $("[data-playerIndex='" + lobby[i].playerIndex + "']").append($('<td class="stat">').text(lobby[i].kills)) //kills
                             .append($('<td class="stat">').text(lobby[i].humansInfected)) //infected
                             .append($('<td class="stat">').text(lobby[i].zombiesKilled)) //zombies killed  
-                        $('.teamHeader .name').attr('colspan',4);
+                        $('.teamHeader .name').attr('colspan',5);
                         break;
                     case "ctf":
                         $("[data-playerIndex='" + lobby[i].playerIndex + "']").append($('<td class="stat">').text(lobby[i].kills)) //kills
                             .append($('<td class="stat">').text(lobby[i].ballKills)) //flag kills
-                        $('.teamHeader .name').attr('colspan',3);
+                        $('.teamHeader .name').attr('colspan',4);
                         break;
                     case "koth":
                         $("[data-playerIndex='" + lobby[i].playerIndex + "']").append($('<td class="stat">').text(lobby[i].kingsKilled)) //kings killed
                             .append($('<td class="stat">').text(lobby[i].timeInHill)) //time in hill
                             .append($('<td class="stat">').text(lobby[i].timeControllingHill)) //time controlling hill
-                        $('.teamHeader .name').attr('colspan',4);
+                        $('.teamHeader .name').attr('colspan',5);
                         break;                   
                     case "vip":
                     case "juggernaut":
@@ -457,30 +579,32 @@ function buildScoreboard(lobby, teamGame, scoreArray, gameType, playersInfo,expa
                             .append($('<td class="stat">').text(lobby[i].assists)) //assists
                             .append($('<td class="stat">').text(lobby[i].deaths)) //deaths 
                             .append($('<td class="stat">').text(lobby[i].bestStreak)) //best streak 
-                        $('.teamHeader .name').attr('colspan',5);
+                        $('.teamHeader .name').attr('colspan',6);
                 }
             }
+			else{
+				$('.teamHeader .name').attr('colspan',2);
+			}
+			$("[data-playerIndex='" + lobby[i].playerIndex + "']").append($('<td class="playerRank">'))
             $("[data-playerIndex='" + lobby[i].playerIndex + "']").append($('<td class="stat score">').text(lobby[i].score)) //score  
-            var speakerClass = "emblem speaker";
-            if($.inArray(lobby[i].name,talkingArray) > -1){
-                speakerClass += " talking";
-            }
-
-            $("[data-playerIndex='" + lobby[i].playerIndex + "'] .name").prepend($('<img class="'+speakerClass+'" src="dew://assets/emblems/speaker-full.png"><input class="volSlider" type="range" min="0" max="5" step="1" value="5"></input>')) //voip speaking indicator        
-            $.grep(volArray, function(result, index){
-                if(result){
-                    if(result[0] == lobby[i].name){
-                        $('#'+lobby[i].name).find('.volSlider').val(result[1]);
-                        if(result[1] < 2){
-                                $('#'+lobby[i].name).find('.speaker').attr('src','dew://assets/emblems/speaker-off.png');
-                        }else if(result[1] < 4){
-                                $('#'+lobby[i].name).find('.speaker').attr('src','dew://assets/emblems/speaker-low.png');
-                        }else{
-                                $('#'+lobby[i].name).find('.speaker').attr('src','dew://assets/emblems/speaker-full.png');
-                        };
-                    }
-                }
-            });            
+			$("[data-playerIndex='" + lobby[i].playerIndex + "'] .playerRank").prepend('<img class="rankimg" src="'+rankPath+'">');
+			
+			var thisSpeakerIcon = "";
+			var isInVoip = false;
+			var volumeLevel = 100;
+			$.grep(volArray, function (result, index) {
+			    if (result) {
+			        if (result[0] == lobby[i].name) {
+			            thisSpeakerIcon = "dew://assets/emblems/speaker-off.png";
+			            isInVoip = true;
+			            volumeLevel = result[2];
+			        }
+			    }
+			});
+			if (isInVoip)
+			    $("[data-playerIndex='" + lobby[i].playerIndex + "'] .name").prepend($('<img class="emblem speaker talking" src="' + thisSpeakerIcon + '"><input class="volSlider" type="range" min="0" max="200" step="1" value="' + volumeLevel + '"></input>')) //voip speaking indicator
+			    else
+			        $("[data-playerIndex='" + lobby[i].playerIndex + "'] .name").prepend($('<img class="emblem speaker" src=""><input class="volSlider" type="range" min="0" max="200" step="1" value="100"></input>')) //voip speaking indicator
             if(lobby[i].hasObjective){
                 $('.objective').remove();
                 if(gameType == "oddball"||gameType == "assault"||gameType == "ctf"){
@@ -495,30 +619,16 @@ function buildScoreboard(lobby, teamGame, scoreArray, gameType, playersInfo,expa
             }
             rankMe(teamGame);
         }      
-        $('.clickable').find('td').on('click',function(){
-            var playerName = $(this).parent().attr('id');
-            playerBreakdown(playerName);
-        });
         $('.volSlider').on('change click', function(e){
             e.stopPropagation();
-            var playerName = $(this).parent().parent().attr('id');
-            $.grep(volArray, function(result, index){
-                if(result){
-                    if(result[0] == playerName){
-                        volArray.splice(index,1);
-                    };
-                }
-            });
-            volArray.push([playerName, $(this).val()]);   
-            dew.command('Game.ExpandedScoreboard', {}).then(function(response){
-                displayScoreboard(response);
-            });   
+            setPlayerVolume($(this).parent().parent().attr('id'),$(this).parent().parent().attr('data-uid'),$(this).val());
+            displayScoreboard(expandedScoreboard);
         });
         $('.speaker').on('click', function(e){
             e.stopPropagation();
             $(this).parent().find('.volSlider').show(); 
-        });  
-    }  
+        });
+    }
 }
 
 function hexToRgb(hex, opacity){
@@ -566,167 +676,164 @@ function rankMe(teamGame){
 }
 
 function playerBreakdown(name){
-    dew.command('Server.ListPlayersJSON').then(function(res){
-        var lobby = JSON.parse(res);
-        var playerIndex = lobby.findIndex(x => x.name == name)
-        var color = hexToRgb(lobby[playerIndex].color, 0.9);
-        
-        if(playerIndex==0){
-            $('#previousPlayer').prop("disabled",true);
-        }else{
-            $('#previousPlayer').prop("disabled",false);      
-            $('#previousPlayer').on('click', function(){
-                $('#previousPlayer').off('click');
-                playerBreakdown(lobby[playerIndex-1].name); 
-            });            
-        }
-        if(playerIndex==(lobby.length-1)){
-            $('#nextPlayer').prop("disabled",true);
-        }else{
-            $('#nextPlayer').prop("disabled",false);   
-            $('#nextPlayer').on('click', function(){ 
-                $('#nextPlayer').off('click');
-                playerBreakdown(lobby[playerIndex+1].name); 
-            });            
-        }
+    var playerIndex = lobbyJSON.findIndex(x => x.name == name);
+    var color = hexToRgb(lobbyJSON[playerIndex].color, 0.9);
+    
+    if(playerIndex==0){
+        $('#previousPlayer').prop("disabled",true);
+    }else{
+        $('#previousPlayer').prop("disabled",false);      
+        $('#previousPlayer').on('click', function(){
+            $('#previousPlayer').off('click');
+            playerBreakdown(lobbyJSON[playerIndex-1].name); 
+        });            
+    }
+    if(playerIndex==(lobbyJSON.length-1)){
+        $('#nextPlayer').prop("disabled",true);
+    }else{
+        $('#nextPlayer').prop("disabled",false);   
+        $('#nextPlayer').on('click', function(){ 
+            $('#nextPlayer').off('click');
+            playerBreakdown(lobbyJSON[playerIndex+1].name); 
+        });            
+    }
 
-        dew.getStats(name).then(function (stats){
-            $('#playerBreakdown').show();
-            $('#playerName').text(name);  
-            $('#playerName').css({'background-color': color});  
-            
-            var weaponArray = $.map(stats.weapons, function(value, index){
-                var tempArray = {'Weapon': index};
-                for (var prop in value){
-                tempArray[prop] = value[prop];
-                }
-                return tempArray;
-            });
-            
-            var kills = 0;
-            var deaths = 0;
-            var suicides = 0;
-            var headshots = 0;
-            $.each( weaponArray, function( index, value ){
-                kills += value.Kills;
-                deaths += value.KilledBy;
-                suicides += value.SuicidesWith;
-                headshots += value.HeadshotsWith;
-            });
-            
-            $('#playerKills').text("Kills: "+kills);  
-            $('#playerDeaths').text("Deaths: "+deaths);
-            $('#playerKDSpread').text("K/D Spread: "+(kills-deaths));
-            $('#playerSuicides').text("Suicides: "+suicides);
+    dew.getStats(name).then(function (stats){
+        $('#playerBreakdown').show();
+        $('#playerName').text(name);  
+        $('#playerName').css({'background-color': color});  
         
-            weaponArray.sort(function(b, a){
+        var weaponArray = $.map(stats.weapons, function(value, index){
+            var tempArray = {'Weapon': index};
+            for (var prop in value){
+            tempArray[prop] = value[prop];
+            }
+            return tempArray;
+        });
+        
+        var kills = 0;
+        var deaths = 0;
+        var suicides = 0;
+        var headshots = 0;
+        $.each( weaponArray, function( index, value ){
+            kills += value.Kills;
+            deaths += value.KilledBy;
+            suicides += value.SuicidesWith;
+            headshots += value.HeadshotsWith;
+        });
+        
+        $('#playerKills').text("Kills: "+kills);  
+        $('#playerDeaths').text("Deaths: "+deaths);
+        $('#playerKDSpread').text("K/D Spread: "+(kills-deaths));
+        $('#playerSuicides').text("Suicides: "+suicides);
+    
+        weaponArray.sort(function(b, a){
+            return parseFloat(a.Kills) - parseFloat(b.Kills);
+        });
+        $('#toolOfDestruction tbody').empty();
+        if(weaponArray[0].Kills!=0){
+            $('#toolOfDestruction tbody').append(
+                $('<tr>')
+                .append($('<td>').text(weaponDetails[weaponDetails.findIndex(x => x.string == weaponArray[0].Weapon)].name))
+                .append($('<td>').text("Kills: "+weaponArray[0].Kills))
+            );
+        }else{
+            $('#toolOfDestruction tbody').append("<tr><td>None</td></tr>"); 
+        } 
+        
+        $('#killedMost').hide();
+        $('#killedMost tbody').empty();
+        var playerKilledArray = stats.playerkilledplayer;
+        if(playerKilledArray.length > 0){
+            $('#killedMost').show();
+            playerKilledArray.sort(function(b, a){
                 return parseFloat(a.Kills) - parseFloat(b.Kills);
-            });
-            $('#toolOfDestruction tbody').empty();
-            if(weaponArray[0].Kills!=0){
-                $('#toolOfDestruction tbody').append(
-                    $('<tr>')
-                    .append($('<td>').text(weaponDetails[weaponDetails.findIndex(x => x.string == weaponArray[0].Weapon)].name))
-                    .append($('<td>').text("Kills: "+weaponArray[0].Kills))
-                );
-            }else{
-                $('#toolOfDestruction tbody').append("<tr><td>None</td></tr>"); 
-            } 
-            
-            $('#killedMost').hide();
-            $('#killedMost tbody').empty();
-            var playerKilledArray = stats.playerkilledplayer;
-            if(playerKilledArray.length > 0){
-                $('#killedMost').show();
-                playerKilledArray.sort(function(b, a){
-                    return parseFloat(a.Kills) - parseFloat(b.Kills);
-                }); 
-                var enemyIndex = lobby.findIndex(x => x.name == playerKilledArray[0].PlayerName);
-                var bgColor = "#C0C0C0";
-                if(enemyIndex > -1){ bgColor = lobby[enemyIndex].color; };
-                $('#killedMost tbody').append(
-                    $('<tr>', {
-                        class: 'player', 
-                        id: playerKilledArray[0].PlayerName,
-                        css: {
-                            backgroundColor: hexToRgb(bgColor, 0.9)
-                        }
-                    }).click(function(){
-                        playerBreakdown($(this).attr('id'));
-                    })
-                    .append($('<td>').text(playerKilledArray[0].PlayerName)) //name
-                    .append($('<td>').text(playerKilledArray[0].Kills)) //kills
-                );
-            }    		
-
-            $('#killedMostBy').hide();          
-            $('#killedMostBy tbody').empty();
-            var killedByArray = stats.playerkilledby;	
-            if(killedByArray.length > 0){		
-                $('#killedMostBy').show(); 			
-                killedByArray.sort(function(b, a){
-                    return parseFloat(a.Kills) - parseFloat(b.Kills);
-                }); 
-                var enemyIndex = lobby.findIndex(x => x.name == killedByArray[0].PlayerName);
-                var bgColor = "#C0C0C0";
-                if(enemyIndex > -1){ bgColor = lobby[enemyIndex].color; };
-                $('#killedMostBy tbody').append(
-                    $('<tr>', {
-                        class: 'player', 
-                        id: killedByArray[0].PlayerName,
-                        css: {
-                            backgroundColor: hexToRgb(bgColor, 0.9)
-                        }
-                    }).click(function(){
-                        playerBreakdown($(this).attr('id'));
-                    })
-                    .append($('<td>').text(killedByArray[0].PlayerName)) //name
-                    .append($('<td>').text(killedByArray[0].Kills)) //kills
-                );
-            }
-
-            var medalArray = $.map(stats.medals, function(value, index){
-                return {'name':index, 'count':value};
-            });
-                    
-            medalArray.sort(function(b, a){
-                return parseFloat(a.count) - parseFloat(b.count);
             }); 
-            
-            if(medalArray[0].count!=0){
-                $('#bigMedal').css("background-image","url("+ medalsPath + "images/" + medalArray[0].name +"."+ imageFormat +")");    
-                $('.medalName').text(medalDetails[medalDetails.findIndex(x => x.string == medalArray[0].name)].name);
-                $('.medalDesc').text(medalDetails[medalDetails.findIndex(x => x.string == medalArray[0].name)].desc);
-            }else{
-                $('#bigMedal').css("background-image","none");    
-                $('.medalName').text(null);
-                $('.medalDesc').text(null);
+            var enemyIndex = lobbyJSON.findIndex(x => x.name == playerKilledArray[0].PlayerName);
+            var bgColor = "#C0C0C0";
+            if(enemyIndex > -1){ bgColor = lobbyJSON[enemyIndex].color; };
+            $('#killedMost tbody').append(
+                $('<tr>', {
+                    class: 'player', 
+                    id: playerKilledArray[0].PlayerName,
+                    css: {
+                        backgroundColor: hexToRgb(bgColor, 0.9)
+                    }
+                }).click(function(){
+                    playerBreakdown($(this).attr('id'));
+                })
+                .append($('<td>').text(playerKilledArray[0].PlayerName)) //name
+                .append($('<td>').text(playerKilledArray[0].Kills)) //kills
+            );
+        }    		
+
+        $('#killedMostBy').hide();          
+        $('#killedMostBy tbody').empty();
+        var killedByArray = stats.playerkilledby;	
+        if(killedByArray.length > 0){		
+            $('#killedMostBy').show(); 			
+            killedByArray.sort(function(b, a){
+                return parseFloat(a.Kills) - parseFloat(b.Kills);
+            }); 
+            var enemyIndex = lobbyJSON.findIndex(x => x.name == killedByArray[0].PlayerName);
+            var bgColor = "#C0C0C0";
+            if(enemyIndex > -1){ bgColor = lobbyJSON[enemyIndex].color; };
+            $('#killedMostBy tbody').append(
+                $('<tr>', {
+                    class: 'player', 
+                    id: killedByArray[0].PlayerName,
+                    css: {
+                        backgroundColor: hexToRgb(bgColor, 0.9)
+                    }
+                }).click(function(){
+                    playerBreakdown($(this).attr('id'));
+                })
+                .append($('<td>').text(killedByArray[0].PlayerName)) //name
+                .append($('<td>').text(killedByArray[0].Kills)) //kills
+            );
+        }
+
+        var medalArray = $.map(stats.medals, function(value, index){
+            return {'name':index, 'count':value};
+        });
+                
+        medalArray.sort(function(b, a){
+            return parseFloat(a.count) - parseFloat(b.count);
+        }); 
+        
+        if(medalArray[0].count!=0){
+            $('#bigMedal').css("background-image","url("+ medalsPath + "images/" + medalArray[0].name +"."+ imageFormat +")");    
+            $('.medalName').text(medalDetails[medalDetails.findIndex(x => x.string == medalArray[0].name)].name);
+            $('.medalDesc').text(medalDetails[medalDetails.findIndex(x => x.string == medalArray[0].name)].desc);
+        }else{
+            $('#bigMedal').css("background-image","none");    
+            $('.medalName').text(null);
+            $('.medalDesc').text(null);
+        }
+        $('#medalBox').empty();
+        for(i=0;i<10;i++){
+            if(medalArray[i].count!=0){
+                $('#medalBox').append(
+                    $('<div>', {
+                        class: 'medal',
+                        id: medalArray[i].name,
+                        css: {
+                            'background-image': "url("+ medalsPath + "images/" + medalArray[i].name +"."+ imageFormat +")"
+                        },
+                        html: "<span class='medalCount'>x "+medalArray[i].count+"</span>"
+                    }).mouseover(function(){
+                        $('#bigMedal').css("background-image","url("+ medalsPath + "images/" + $(this).attr('id') +"."+ imageFormat +")");
+                        $('.medalName').text(medalDetails[medalDetails.findIndex(x => x.string == $(this).attr('id'))].name);
+                        $('.medalDesc').text(medalDetails[medalDetails.findIndex(x => x.string == $(this).attr('id'))].desc);
+                    })
+                );
             }
-            $('#medalBox').empty();
-            for(i=0;i<10;i++){
-                if(medalArray[i].count!=0){
-                    $('#medalBox').append(
-                        $('<div>', {
-                            class: 'medal',
-                            id: medalArray[i].name,
-                            css: {
-                                'background-image': "url("+ medalsPath + "images/" + medalArray[i].name +"."+ imageFormat +")"
-                            },
-                            html: "<span class='medalCount'>x "+medalArray[i].count+"</span>"
-                        }).mouseover(function(){
-                            $('#bigMedal').css("background-image","url("+ medalsPath + "images/" + $(this).attr('id') +"."+ imageFormat +")");
-                            $('.medalName').text(medalDetails[medalDetails.findIndex(x => x.string == $(this).attr('id'))].name);
-                            $('.medalDesc').text(medalDetails[medalDetails.findIndex(x => x.string == $(this).attr('id'))].desc);
-                        })
-                    );
-                }
-            }
-            var fillerCount = 10 - $('#medalBox').children().length;
-            for(i=0;i<fillerCount;i++){
-                $('#medalBox').append('<div class="medal">');
-            }
-        })
-    }); 
+        }
+        var fillerCount = 10 - $('#medalBox').children().length;
+        for(i=0;i<fillerCount;i++){
+            $('#medalBox').append('<div class="medal">');
+        }
+    })
 }
 
 function adjustColor(color, amount){
@@ -743,21 +850,11 @@ function adjustColor(color, amount){
     return "#" + colorhex[0] + colorhex[1] + colorhex[2];
 }
 
-
-function flipUID(uid){
-    var bits = uid.match(/.{1,2}/g);
-    var newUID = "";
-    for (var i = 0; i < bits.length; i++){
-        newUID = bits[i] + newUID;
-    }
-    return newUID;
-}
-
 function onControllerConnect(){
     $('#closeButton').css('padding-right', '1.75vw');
     dew.command('Game.IconSet', {}).then(function(response){
         controllerType = response;
-        $('#closeButton .button').attr('src','dew://assets/buttons/'+controllerType+'_Start.png');
+        $('#closeButton .button').attr('src','dew://assets/buttons/'+controllerType+'_Back.png');
         $('#closeButton .button').show();
     });  
 }
@@ -795,4 +892,47 @@ function downNav(){
         itemNumber++;
         updateSelection(itemNumber);
     }           
+}
+
+function checkGamepad(){
+    var shouldUpdateHeld = false;
+    if(Date.now() - lastHeldUpdated > 100) {
+        shouldUpdateHeld = true;
+        lastHeldUpdated = Date.now();
+    }
+    if(stickTicks.up == 1 || (shouldUpdateHeld && stickTicks.up > 25)){
+        upNav();
+    }
+    if(stickTicks.down == 1 || (shouldUpdateHeld && stickTicks.down > 25)){
+        downNav();
+    }
+};
+
+var volArray = [];
+function setPlayerVolume(name,uid,level){
+	var speakingLevel = 0;
+    $.grep(volArray, function(result, index){
+        if(result){
+            if(result[0] == name){
+				speakingLevel = result[3];
+                volArray.splice(index,1);
+            };
+        }
+    });
+    volArray.push([name, uid, level, speakingLevel]);
+    dew.show("voip", {
+        volume:{
+            uid:name + "|" + uid,
+            vol:level / 100.0
+        }
+    });
+    console.log(name, uid,level);
+}
+
+function isSpeaking(name,visible){
+    if(visible){
+        $('#'+name).find('.speaker').addClass('talking');
+    }else{
+        //$('#'+name).find('.speaker').removeClass('talking');  
+    }
 }

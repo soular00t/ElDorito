@@ -4,6 +4,7 @@
 #include "ElPatches.hpp"
 #include "Patches/Network.hpp"
 #include "Server/DedicatedServer.hpp"
+#include "Server/Stats.hpp"
 #include "Server/ServerChat.hpp"
 #include "Server/VariableSynchronization.hpp"
 #include "Server/BanList.hpp"
@@ -23,9 +24,11 @@
 #include "Modules/ModuleGame.hpp"
 #include "Patch.hpp"
 #include "Modules/ModuleCamera.hpp"
+#include "Modules/ModuleInput.hpp"
 #include "Server/Voting.hpp"
 #include "ChatCommands/ChatCommandMap.hpp"
 #include "Patches/Weapon.hpp"
+#include "Patches/Memory.hpp"
 
 #include "Blam/Cache/StringIdCache.hpp"
 
@@ -33,6 +36,7 @@
 #include <TlHelp32.h>
 #include <codecvt>
 #include <detours.h>
+#include "Web/Ui/WebSettings.hpp"
 
 size_t ElDorito::MainThreadID = 0;
 
@@ -120,8 +124,9 @@ void ElDorito::Initialize()
 	}
 	Modules::CommandMap::Instance().ExecuteCommand("Execute autoexec.cfg"); // also execute autoexec, which is a user-made cfg guaranteed not to be overwritten by ElDew
 
-	//This should be removed when we can save binds
-	Modules::CommandMap::Instance().ExecuteCommand("Bind CAPITAL +VoIP.Talk");
+	// maybe use an unordered_map here
+	if (!Modules::ModuleInput::Instance().IsCommandBound("game.takescreenshot"))
+		Modules::CommandMap::Instance().ExecuteCommand("Bind PrintScreen Game.TakeScreenshot");
 
 	mapsFolder = "maps\\";
 
@@ -140,6 +145,7 @@ void ElDorito::Initialize()
 			if (arg.compare(L"-dedicated") == 0 || arg.compare(L"-headless") == 0)
 			{
 				isDedicated = true;
+				Modules::CommandMap::Instance().ExecuteCommand("Server.Dedicated 1");
 			}
 
 			if (arg.compare(L"-maps") == 0 && i < numArgs - 1)
@@ -160,6 +166,9 @@ void ElDorito::Initialize()
 
 			if (arg.compare(L"-password") == 0 && i < numArgs - 1)
 				serverPassword = Utils::String::ThinString(szArgList[i + 1]);
+
+			if (arg.compare(L"-cache-memory-increase") == 0 && i < numArgs - 1)
+				Patches::Memory::SetGlobalCacheIncrease(std::stoul(szArgList[i + 1]));
 
 			size_t pos = arg.find(L"=");
 			if( pos == std::wstring::npos || arg.length() <= pos + 1 ) // if it doesn't contain an =, or there's nothing after the =
@@ -202,6 +211,7 @@ void ElDorito::Initialize()
 		Web::Ui::WebLoadingScreen::Init();
 		Web::Ui::Voting::Init();
 		Web::Ui::WebVirtualKeyboard::Init();
+		Web::Ui::WebSettings::Init();
 
 		if (connectToServer)
 		{
@@ -222,6 +232,7 @@ void ElDorito::Initialize()
 	// Initialize server modules
 	Server::Chat::Initialize();
 	ChatCommands::Init();
+	Server::Stats::Init();
 	Server::Voting::Init();
 	Server::VariableSynchronization::Initialize();
 	Server::Rcon::Initialize();
@@ -241,12 +252,11 @@ void ElDorito::Tick()
 	if (!isDedicated) {
 		Web::Ui::ScreenLayer::Tick();
 		Web::Ui::WebScoreboard::Tick();
-		
-
 	}
 	else
 		Server::DedicatedServer::Tick();
 
+	Server::Stats::Tick();
 	Server::Voting::Tick();
 	ChatCommands::Tick();
 
@@ -292,8 +302,7 @@ void ElDorito::OnMainMenuShown()
 	executeCommandQueue = true;
 	if (isDedicated)
 		Server::DedicatedServer::Init();
-
-	if (!skipTitleSplash && !isDedicated)
+	else
 		Web::Ui::ScreenLayer::Show("title", "{}");
 }
 

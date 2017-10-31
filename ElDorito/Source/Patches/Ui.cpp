@@ -3,22 +3,36 @@
 #include "../ElDorito.hpp"
 #include "../Patch.hpp"
 #include "../Patches/Core.hpp"
+#include "../Patches/Input.hpp"
 #include "../Blam/BlamInput.hpp"
 #include "../Blam/Tags/TagInstance.hpp"
 #include "../Blam/Tags/UI/ChudGlobalsDefinition.hpp"
 #include "../Blam/Tags/UI/ChudDefinition.hpp"
+#include "../Blam/Tags/Globals/CacheFileGlobalTags.hpp"
+#include "../Blam/Tags/Game/Globals.hpp"
+#include "../Blam//Tags/Objects/Biped.hpp"
 #include "../Blam/Tags/Items/Weapon.hpp"
+#include "../Blam/Tags/Globals/CacheFileGlobalTags.hpp"
+#include "../Blam/Tags/Game/Globals.hpp"
+#include "../Blam/Tags/Game/MultiplayerGlobals.hpp"
+#include "../Blam/Tags/UI/GfxTexturesList.hpp"
 #include "../Blam/BlamNetwork.hpp"
 #include "../Blam/BlamObjects.hpp"
 #include "../Modules/ModuleGraphics.hpp"
 #include "../Modules/ModuleInput.hpp"
 #include "../Modules/ModuleGame.hpp"
+#include "../Modules/ModuleVoIP.hpp"
 #include "../Web/Ui/ScreenLayer.hpp"
 #include "../Blam/Tags/UI/MultilingualUnicodeStringList.hpp"
+#include "../Modules/ModuleTweaks.hpp"
+#include "../Modules/ModuleCamera.hpp"
 #include <iostream>
 #include <string>
 #include <iomanip>
 #include <cassert>
+#include <vector>
+#include <unordered_map>
+#include "../Web/Ui/ScreenLayer.hpp"
 
 using namespace Patches::Ui;
 
@@ -33,6 +47,8 @@ namespace
 	void LobbyMenuButtonHandlerHook();
 	void WindowTitleSprintfHook(char* destBuf, char* format, char* version);
 	void ResolutionChangeHook();
+	int __fastcall UI_SetPlayerDesiredTeamHook(void *thisPtr, int unused, int a2, int teamIndex, int a4);
+	void OnUiInputUpdated();
 	void __fastcall UI_UpdateRosterColorsHook(void *thisPtr, int unused, void *a0);
 	HWND CreateGameWindowHook();
 	void __cdecl UI_UpdateH3HUDHook(int playerMappingIndex);
@@ -40,16 +56,99 @@ namespace
 	void UI_GetHUDGlobalsIndexHook();
 	void __fastcall c_main_menu_screen_widget_item_select_hook(void* thisptr, void* unused, int a2, int a3, void* a4, void* a5);
 	void __fastcall c_ui_view_draw_hook(void* thisptr, void* unused);
+	void __fastcall c_gui_bitmap_widget_update_render_data_hook(void* thisptr, void* unused, void* renderData, int a3, int a4, int a5, int a6, int a7);
+	void __fastcall c_gui_alert_manager__show(void *thisptr, void *unused, uint32_t name, int a3, wchar_t *customMessage, int profileIndex, bool a6, int a7);
+
+	template <int MaxItems>
+	struct c_gui_generic_category_datasource
+	{
+		uint8_t order_date_source[0x10c];
+		wchar_t RecentName[48];
+		wchar_t RecentDescription[256];
+		wchar_t FileshareName[48];
+		wchar_t FileshareDescription[256];
+		struct
+		{
+			int Type;
+			int MapId;
+			wchar_t Name[48];
+			wchar_t Description[256];
+			int field_268;
+		} items[MaxItems];
+		int ItemCount;
+	};
+	using c_gui_map_category_datasource = c_gui_generic_category_datasource<50>;
+	using c_gui_game_variant_category_datasource = c_gui_generic_category_datasource<11>;
+
+	bool __fastcall c_gui_map_category_datasource_init(c_gui_map_category_datasource *thisptr, void* unused, int datasource);
+	bool __fastcall c_gui_game_variant_category_datasource_init(c_gui_game_variant_category_datasource *thisptr, void* unused, int datasource);
+
+	void CameraModeChangedHook();
+	void StateDataFlags2Hook();
+	void StateDataFlags3Hook();
+	void StateDataFlags5Hook();
+	void StateDataFlags21Hook();
+	void StateDataFlags31Hook();
+	int GetBrokenChudStateFlags2Values();
+	int GetBrokenChudStateFlags3Values();
+	int GetBrokenChudStateFlags5Values();
+	int GetBrokenChudStateFlags21Values();
+	int GetBrokenChudStateFlags31Values();
+	int GetBrokenChudStateFlags33Values();
+	void MenuSelectedMapIDChangedHook();
+
+	void FindUiTagIndices();
+	void FindVoiceChatSpeakingPlayerTagData();
+	void FindHUDDistortionTagData();
+	void FindHUDResolutionTagData();
+	void FindMapImages();
+
+	void ToggleHUDDistortion(bool enabled);
+
+	void c_gui_screen_pregame_lobby_switch_network_hook();
 
 	std::vector<CreateWindowCallback> createWindowCallbacks;
 
 	Patch unused; // for some reason a patch field is needed here (on release builds) otherwise the game crashes while loading map/game variants, wtf?
 
+	static auto IsMapLoading = (bool(*)())(0x005670E0);
+	static auto IsMainMenu = (bool(*)())(0x00531E90);
+
+	uint32_t hudMessagesUnicIndex;
+	uint32_t spartanChdtIndex;
+	//uint32_t eliteChdtIndex; //Uncomment as needed.
+	//uint32_t monitorChdtIndex;
+	uint32_t scoreboardChdtIndex;
+	uint32_t chgdIndex;
+	uint32_t pttLsndIndex;
+
 	bool tagsInitiallyLoaded = false;
-	VoiceChatIcon micState = VoiceChatIcon::Unavailable;
-	bool someoneSpeaking = false;
 	const std::string SPEAKING_PLAYER_STRING_NAME = "speaking_player";
 	int32_t speakingPlayerStringID;
+
+	int localDesiredTeam = -1;
+	int teamChangeTicks = 0;
+
+	bool foundMapImages = false;
+	int multiplayerPlaceholderIndex;
+	std::unordered_map<int, int> mapImages = std::unordered_map<int, int>();
+
+	int HUDResolutionWidth = 0;
+	int HUDResolutionHeight = 0;
+	float HUDResolutionScaleX = 0;
+	float HUDResolutionScaleY = 0;
+	float HUDMotionSensorOffsetX = 0;
+	float HUDBottomVisorOffsetY = 0;
+
+	bool firstHUDDistortionUpdate = true;
+	bool validHUDDistortionTags = false;
+	bool lastDistortionEnabledValue = true;
+	//Distortion direction for spartan, monitor, elite.
+	//If more are added, this needs to be increased or stored differently.
+	float hudDistortionDirection[3]{ 0,0,0 };
+
+	bool speakingPlayerStringFound = false;
+	uint32_t speakingPlayerOffset; //The offset of speaker_name in memory.
 }
 
 namespace Patches::Ui
@@ -58,324 +157,27 @@ namespace Patches::Ui
 	{
 		if (!tagsInitiallyLoaded)
 		{
-			// use the correct hud globals for the player representation
-			if (Modules::ModuleGame::Instance().VarFixHudGlobals->ValueInt)
-				Hook(0x6895E7, UI_GetHUDGlobalsIndexHook).Apply();
+			FindUiTagData();
 		}
 
 		tagsInitiallyLoaded = true;
-	}
 
-	const auto UI_Alloc = reinterpret_cast<void *(__cdecl *)(int32_t)>(0xAB4ED0);
-	const auto UI_OpenDialogById = reinterpret_cast<void *(__thiscall *)(void *, Blam::Text::StringID, int32_t, int32_t, Blam::Text::StringID)>(0xA92780);
-	const auto UI_PostMessage = reinterpret_cast<int(*)(void *)>(0xA93450);
+		UpdateSpeakingPlayerWidget(true);
 
-	void *ShowDialog(const Blam::Text::StringID p_DialogID, const int32_t p_Arg1, const int32_t p_Flags, const Blam::Text::StringID p_ParentID)
-	{
-		auto *s_UIData = UI_Alloc(0x40);
-
-		if (!s_UIData)
-			return nullptr;
-
-		UI_OpenDialogById(s_UIData, p_DialogID, p_Arg1, p_Flags, p_ParentID);
-		UI_PostMessage(s_UIData);
-
-		return s_UIData;
-	}
-
-	void OnCreateWindow(CreateWindowCallback callback)
-	{
-		createWindowCallbacks.push_back(callback);
-	}
-
-	void SetVoiceChatIcon(VoiceChatIcon newIcon)
-	{
-		micState = newIcon;
-		UpdateVoiceChatHUD();
-	}
-
-	void ToggleSpeakingPlayer(bool newSomeoneSpeaking)
-	{
-		someoneSpeaking = newSomeoneSpeaking;
-		UpdateVoiceChatHUD();
-	}
-
-	bool firstStringUpdate = true;
-	int speakingPlayerOffset; //The offset of speaker_name in memory.
-	int speakingPlayerIndex = 0; //Hud Widget Containing Speaker.
-	static const char* const hex = "0123456789ABCDEF";
-	std::stringstream hexStringStream;
-
-	void SetSpeakingPlayer(std::string speakingPlayer)
-	{
-		if (!tagsInitiallyLoaded) //Commands might call methods a little early.
-			return;
-
-
-		//This method could use some refactoring, and performance could be improved I think.
-		using Blam::Tags::TagInstance;
-		using Blam::Tags::UI::MultilingualUnicodeStringList;
-		using Blam::Tags::UI::ChudDefinition;
-
-		//If the client is speaking, hide the text and let icons display.
-		//Really this method shouldn't be called with the client's username, but here's a half working fix for that if necessary.
-		//if (speakingPlayer == username)
-		//{
-		//	ToggleSpeakingPlayer(false);
-		//	return;
-		//}
-
-		if (speakingPlayer.length() > 15) // player names are limited to 15 anyway.
-			return;
-
-		auto *unic = Blam::Tags::TagInstance(0x12c2).GetDefinition<Blam::Tags::UI::MultilingualUnicodeStringList>();
-
-		if (firstStringUpdate)
-		{
-			//go through string blocks backwards to find speaking_player, as it should be at the end.
-			for (int stringBlockIndex = unic->Strings.Count - 1; stringBlockIndex > -1; stringBlockIndex--)
-				if (SPEAKING_PLAYER_STRING_NAME == (std::string)unic->Strings[stringBlockIndex].StringIDStr)
-				{
-					speakingPlayerOffset = unic->Strings[stringBlockIndex].Offsets[0]; //read the english offset,
-					speakingPlayerStringID = unic->Strings[stringBlockIndex].StringID;
-					break;
-				}
-
-			//If the speaking_player string cannot be found, RIP. This shouldn't happen unless tags don't have correct modifications.
-			if (speakingPlayerOffset == NULL)
-				throw nullptr;
-
-			firstStringUpdate = false;
-		}
-
-		std::string newHudMessagesStrings;
-		newHudMessagesStrings.reserve(30);
-
-		for (size_t i = 0; i < speakingPlayer.length(); ++i)
-		{
-			const unsigned char c = speakingPlayer[i];
-			newHudMessagesStrings.push_back(hex[c >> 4]);
-			newHudMessagesStrings.push_back(hex[c & 15]);
-		}
-
-		//if the speaker name is less than 15 characters, fill the rest of the string with 0.
-		if (speakingPlayer.length() < (size_t)15)
-			for (int i = speakingPlayer.length() * 2; i < 30; ++i)
-				newHudMessagesStrings.push_back('0');
-
-		//Now convert the hex string to a byte array and poke!
-		hexStringStream >> std::hex;
-		for (size_t strIndex = 0, dataIndex = 0; strIndex < (size_t)newHudMessagesStrings.length(); ++dataIndex)
-		{
-			// Read out and convert the string two characters at a time
-			const char tmpStr[3] = { newHudMessagesStrings[strIndex++], newHudMessagesStrings[strIndex++], 0 };
-
-			// Reset and fill the string stream
-			hexStringStream.clear();
-			hexStringStream.str(tmpStr);
-
-			// Do the conversion
-			int tmpValue = 0;
-			hexStringStream >> tmpValue;
-			unic->Data.Elements[dataIndex + speakingPlayerOffset] = static_cast<unsigned char>(tmpValue);
-		}
-
-		if (speakingPlayerIndex != NULL)
-		{
-			auto *chud = Blam::Tags::TagInstance(0x12BD).GetDefinition<Blam::Tags::UI::ChudDefinition>();
-			//Make sure that the speaking player HUD widget has the correct string.
-			chud->HudWidgets[speakingPlayerIndex].TextWidgets[0].TextStringID = speakingPlayerStringID;
-		}
-
-	}
-
-	bool firstHudUpdate = true;
-	unsigned short teamBroadcastIndicatorIndex = 0; //Hud Widget containing Icons.
-	unsigned short broadcastAvailableIndex = 0; //Can Talk Icon
-	unsigned short broadcastIndex = 0; //Talking Icon.
-	unsigned short broadcastPTTIndex = 0; //Push To Talk Icon
-	unsigned short broadcastNoIndex = 0; //Can't Talk Icon
-	unsigned short spartanMotionTrackerIndex = 0; //motion_tracker hud widget.
-	unsigned short spartanVoiceBroadcast1Index = 0; //Speaking radar icon 1.
-	unsigned short spartanVoiceBroadcast2Index = 0; //Speaking radar icon 2.
-	//Support for the elite HUD, just in case any mods need it.
-	unsigned short eliteMotionTrackerIndex = 0;
-	unsigned short eliteVoiceBroadcast1Index = 0; //Speaking radar icon 1.
-	unsigned short eliteVoiceBroadcast2Index = 0; //Speaking radar icon 2.
-
-	bool voiceChatIconValidTags = false;
-
-	void UpdateVoiceChatHUD()
-	{
-		if (!tagsInitiallyLoaded)
-			return;
-
-		using Blam::Tags::TagInstance;
-		using Blam::Tags::UI::ChudDefinition;
-
-		//If there's no data to toggle (due to modded tags), do nothing.
-		if (!firstHudUpdate && !voiceChatIconValidTags)
-			return;
-
-		auto *scoreboardChud = Blam::Tags::TagInstance(0x12BD).GetDefinition<Blam::Tags::UI::ChudDefinition>();
-		auto *spartanChud = Blam::Tags::TagInstance(0x0C1E).GetDefinition<Blam::Tags::UI::ChudDefinition>();
-		//auto *eliteChud = Blam::Tags::TagInstance(0x0E5F).GetDefinition<Blam::Tags::UI::ChudDefinition>();
-
-		//If it's the first time updating the HUD, find the tagblock indexes.
-		if (firstHudUpdate)
-		{
-			//Find widgets in spartan.
-			for (int hudWidgetBlock = 0; hudWidgetBlock < spartanChud->HudWidgets.Count; hudWidgetBlock++)
-			{
-				if (spartanChud->HudWidgets[hudWidgetBlock].NameStringID == 0x2A76) //motion_tracker
-				{
-					spartanMotionTrackerIndex = hudWidgetBlock;
-
-					for (int bitmapWidgetBlock = 0; bitmapWidgetBlock < spartanChud->HudWidgets[hudWidgetBlock].BitmapWidgets.Count; bitmapWidgetBlock++)
-					{
-						if (spartanChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x2A77) //voice_broadcast1
-							spartanVoiceBroadcast1Index = bitmapWidgetBlock;
-						else if (spartanChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x2A78) //voice_broadcast2
-							spartanVoiceBroadcast2Index = bitmapWidgetBlock;
-
-						if (spartanVoiceBroadcast1Index != NULL && spartanVoiceBroadcast2Index != NULL)
-							break;
-					}
-				}
-				if (spartanMotionTrackerIndex != NULL)
-					break;
-			}
-
-			/*
-			//Find widgets in elite.
-			for (int hudWidgetBlock = 0; hudWidgetBlock < eliteChud->HudWidgets.Count; hudWidgetBlock++)
-			{
-				if (eliteChud->HudWidgets[hudWidgetBlock].NameStringID == 0x2A76) //motion_tracker
-				{
-					eliteMotionTrackerIndex = hudWidgetBlock;
-
-					for (int bitmapWidgetBlock = 0; bitmapWidgetBlock < eliteChud->HudWidgets[hudWidgetBlock].BitmapWidgets.Count; bitmapWidgetBlock++)
-					{
-						if (eliteChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x2A77) //voice_broadcast1
-							eliteVoiceBroadcast1Index = bitmapWidgetBlock;
-						else if (eliteChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x2A78) //voice_broadcast2
-							eliteVoiceBroadcast2Index = bitmapWidgetBlock;
-
-						if (eliteVoiceBroadcast1Index != NULL && eliteVoiceBroadcast2Index != NULL)
-							break;
-					}
-				}
-				if (eliteMotionTrackerIndex != NULL)
-					break;
-			}
-			*/
-
-			//Find widgets in scoreboard.
-			for (int hudWidgetBlock = 0; hudWidgetBlock < scoreboardChud->HudWidgets.Count; hudWidgetBlock++)
-			{
-				if (scoreboardChud->HudWidgets[hudWidgetBlock].NameStringID == 0x45C2) // team_broadcast_indicator
-				{
-					teamBroadcastIndicatorIndex = hudWidgetBlock;
-
-					for (int bitmapWidgetBlock = 0; bitmapWidgetBlock < scoreboardChud->HudWidgets[hudWidgetBlock].BitmapWidgets.Count; bitmapWidgetBlock++)
-					{
-						if (scoreboardChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x45C3) // broadcast
-							broadcastIndex = bitmapWidgetBlock;
-						else if (scoreboardChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x45C4) // broadcast_available
-							broadcastAvailableIndex = bitmapWidgetBlock;
-						else if (scoreboardChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x45C5) // broadcast_ptt_sybmol
-							broadcastPTTIndex = bitmapWidgetBlock;
-						else if (scoreboardChud->HudWidgets[hudWidgetBlock].BitmapWidgets[bitmapWidgetBlock].NameStringID == 0x45C6) // broadcast_no
-							broadcastNoIndex = bitmapWidgetBlock;
-
-						//if everything is found, break early.
-						if (((broadcastIndex != NULL) && (broadcastAvailableIndex != NULL)) && ((broadcastPTTIndex != NULL) && (broadcastNoIndex != NULL)))
-							break;
-					}
-				}
-				if (scoreboardChud->HudWidgets[hudWidgetBlock].NameStringID == 0x45BF) // speaker_name
-				{
-					speakingPlayerIndex = hudWidgetBlock;
-				}
-				if ((teamBroadcastIndicatorIndex != NULL) && (speakingPlayerIndex != NULL))
-					break;
-			}
-
-			//Check the availability of statedata, positiondata.
-			if (scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastIndex].StateData.Count > 0 &&
-				scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastAvailableIndex].StateData.Count > 0 &&
-				scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastNoIndex].StateData.Count > 0 &&
-				scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastPTTIndex].StateData.Count > 0 &&
-				scoreboardChud->HudWidgets[speakingPlayerIndex].StateData.Count > 0 &&
-				spartanChud->HudWidgets[spartanMotionTrackerIndex].BitmapWidgets[spartanVoiceBroadcast1Index].StateData.Count > 0 &&
-				spartanChud->HudWidgets[spartanMotionTrackerIndex].BitmapWidgets[spartanVoiceBroadcast2Index].StateData.Count > 0)/* &&
-				eliteChud->HudWidgets[eliteMotionTrackerIndex].BitmapWidgets[eliteVoiceBroadcast1Index].StateData.Count > 0 &&
-				eliteChud->HudWidgets[eliteMotionTrackerIndex].BitmapWidgets[eliteVoiceBroadcast2Index].StateData.Count > 0)*/
-				voiceChatIconValidTags = true;
-
-			firstHudUpdate = false;
-		}
-
-		//Hide all Icons.
-		//Bit 7 is the broken "Tap to Talk" state used in halo 3.
-		//Disabling the icon using a broken state triggers the close animation. Then removing this state triggers the open animation.
-		scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastIndex].StateData[0].EngineFlags3 = ChudDefinition::StateDataEngineFlags3::Bit7;
-		scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastAvailableIndex].StateData[0].EngineFlags3 = ChudDefinition::StateDataEngineFlags3::Bit7;
-		scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastNoIndex].StateData[0].EngineFlags3 = ChudDefinition::StateDataEngineFlags3::Bit7;
-		scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastPTTIndex].StateData[0].EngineFlags3 = ChudDefinition::StateDataEngineFlags3::Bit7;
-
-		scoreboardChud->HudWidgets[speakingPlayerIndex].StateData[0].ScoreboardFlags1 = ChudDefinition::StateDataScoreboardFlags1::Bit3;
-
-		spartanChud->HudWidgets[spartanMotionTrackerIndex].BitmapWidgets[spartanVoiceBroadcast1Index].StateData[0].UnknownFlags13 = ChudDefinition::StateDataUnknownFlags::Bit10;
-		spartanChud->HudWidgets[spartanMotionTrackerIndex].BitmapWidgets[spartanVoiceBroadcast2Index].StateData[0].UnknownFlags13 = ChudDefinition::StateDataUnknownFlags::Bit10;
-
-		//eliteChud->HudWidgets[eliteMotionTrackerIndex].BitmapWidgets[eliteVoiceBroadcast1Index].StateData[0].UnknownFlags13 = ChudDefinition::StateDataUnknownFlags::Bit10;
-		//eliteChud->HudWidgets[eliteMotionTrackerIndex].BitmapWidgets[eliteVoiceBroadcast2Index].StateData[0].UnknownFlags13 = ChudDefinition::StateDataUnknownFlags::Bit10;
-
-		//Show the correct Icon.
-		//To remove hardcoded scale values, we could store these default scales earlier by reading them on first update. I'm gonna leave them for now.
-		switch (micState)
-		{
-		case VoiceChatIcon::Speaking:
-			scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastIndex].StateData[0].EngineFlags3 = (ChudDefinition::StateDataEngineFlags3)0;
-			spartanChud->HudWidgets[spartanMotionTrackerIndex].BitmapWidgets[spartanVoiceBroadcast1Index].StateData[0].UnknownFlags13 = (ChudDefinition::StateDataUnknownFlags)0;
-			spartanChud->HudWidgets[spartanMotionTrackerIndex].BitmapWidgets[spartanVoiceBroadcast2Index].StateData[0].UnknownFlags13 = (ChudDefinition::StateDataUnknownFlags)0;
-			//eliteChud->HudWidgets[eliteMotionTrackerIndex].BitmapWidgets[eliteVoiceBroadcast1Index].StateData[0].UnknownFlags13 = (ChudDefinition::StateDataUnknownFlags)0;
-			//eliteChud->HudWidgets[eliteMotionTrackerIndex].BitmapWidgets[eliteVoiceBroadcast2Index].StateData[0].UnknownFlags13 = (ChudDefinition::StateDataUnknownFlags)0;
-			break;
-		case VoiceChatIcon::Available:
-			scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastAvailableIndex].StateData[0].EngineFlags3 = (ChudDefinition::StateDataEngineFlags3)0;
-			break;
-		case VoiceChatIcon::Unavailable:
-			scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastNoIndex].StateData[0].EngineFlags3 = (ChudDefinition::StateDataEngineFlags3)0;
-			break;
-		case VoiceChatIcon::PushToTalk:
-			scoreboardChud->HudWidgets[teamBroadcastIndicatorIndex].BitmapWidgets[broadcastPTTIndex].StateData[0].EngineFlags3 = (ChudDefinition::StateDataEngineFlags3)0;
-			break;
-		case VoiceChatIcon::None: //Not sure if this is even needed.
-			break;
-		}
-
-		if (someoneSpeaking)
-			scoreboardChud->HudWidgets[speakingPlayerIndex].StateData[0].ScoreboardFlags1 = (ChudDefinition::StateDataScoreboardFlags1)0;
+		//reset HUD distortion value when tags are reloaded
+		lastDistortionEnabledValue = true;
+		UpdateHUDDistortion();
 	}
 
 	void ApplyAll()
 	{
-		// Rewire $hq.MatchmakingLeaveQueue() to end the game
-		Hook(0x3B6826, UI_EndGame, HookFlags::IsCall).Apply();
-		Patch::NopFill(Pointer::Base(0x3B6826 + 5), 1);
-
-		// Rewire $hf2pEngine.PerformLogin() to show the pause menu
-		Hook(0x234756, &UI_ShowHalo3PauseMenu, HookFlags::IsCall).Apply();
-		Patch::NopFill(Pointer::Base(0x234756 + 5), 1);
-
 		// Allows you to press B to close the H3 pause menu
 		// TODO: find out what the byte that's being checked does, we're just patching out the check here but maybe it's important
 		Patch::NopFill(Pointer::Base(0x6E05F3), 2);
 
 		// Fix "Network" setting in lobbies (change broken 0x100B7 menuID to 0x100B6)
 		Patch(0x6C34B0, { 0xB6 }).Apply();
+		Patch(0x705B21, { 0xB6 }).Apply();
 
 		// Fix gamepad option in settings (todo: find out why it doesn't detect gamepads
 		// and find a way to at least enable pressing ESC when gamepad is enabled)
@@ -416,10 +218,6 @@ namespace Patches::Ui
 		// Localized string override hook
 		Hook(0x11E040, LocalizedStringHook).Apply();
 
-		// Remove "BUILT IN" text when choosing map/game variants by feeding the UI_SetVisiblityOfElement func a nonexistant string ID for the element (0x202E8 instead of 0x102E8)
-		// TODO: find way to fix this text instead of removing it, since the 0x102E8 element (subitem_edit) is used for other things like editing/viewing map variant metadata
-		Patch(0x705D6F, { 0x2 }).Apply();
-
 		// Hook window title sprintf to replace the dest buf with our string
 		Hook(0x2EB84, WindowTitleSprintfHook, HookFlags::IsCall).Apply();
 
@@ -457,98 +255,205 @@ namespace Patches::Ui
 
 		Pointer(0x0169FCE0).Write(uint32_t(&c_main_menu_screen_widget_item_select_hook));
 		Hook(0x2047BF, c_ui_view_draw_hook, HookFlags::IsCall).Apply();
+
+		Hook(0x721D38, UI_SetPlayerDesiredTeamHook, HookFlags::IsCall).Apply();
+		Patches::Input::RegisterDefaultInputHandler(OnUiInputUpdated);
+
+		//Fix HUD Distortion in third person.
+		Hook(0x193370, CameraModeChangedHook, HookFlags::IsCall).Apply();
+
+		//Fix Chud Widget State Data
+		Hook(0x686FA4, StateDataFlags2Hook).Apply();
+		Hook(0x686E7B, StateDataFlags3Hook).Apply();
+		Hook(0x687094, StateDataFlags5Hook).Apply();
+		Hook(0x687BF0, StateDataFlags21Hook).Apply();
+		Hook(0x685A5A, StateDataFlags31Hook).Apply();
+
+		// use the correct hud globals for the player representation
+		Hook(0x6895E7, UI_GetHUDGlobalsIndexHook).Apply();
+
+		//Fix map images in lobby.
+		Pointer(0x016A6240).Write(uint32_t(&c_gui_bitmap_widget_update_render_data_hook));
+
+		//Fix map images in the selection menu.
+		Hook(0x6DA0FE, MenuSelectedMapIDChangedHook).Apply();
+		// remove recent maps, fileshare menu items
+		Pointer(0x0169E270).Write(uint32_t(&c_gui_map_category_datasource_init));
+		// remove game variants, fileshare menu items
+		Pointer(0x0169E510).Write(uint32_t(&c_gui_game_variant_category_datasource_init));
+
+		Hook(0x721F03, c_gui_screen_pregame_lobby_switch_network_hook).Apply();
+
+		Hook(0x691FD0, c_gui_alert_manager__show).Apply();
 	}
 
-	void ApplyMapNameFixes()
+	const auto UI_Alloc = reinterpret_cast<void *(__cdecl *)(int32_t)>(0xAB4ED0);
+	const auto UI_OpenDialogById = reinterpret_cast<void *(__thiscall *)(void *, Blam::Text::StringID, int32_t, int32_t, Blam::Text::StringID)>(0xA92780);
+	const auto UI_PostMessage = reinterpret_cast<int(*)(void *)>(0xA93450);
+
+	void *ShowDialog(const Blam::Text::StringID p_DialogID, const int32_t p_Arg1, const int32_t p_Flags, const Blam::Text::StringID p_ParentID)
 	{
-		uint32_t levelsGlobalPtr = Pointer::Base(0x149E2E0).Read<uint32_t>();
-		if (!levelsGlobalPtr)
+		auto *s_UIData = UI_Alloc(0x40);
+
+		if (!s_UIData)
+			return nullptr;
+
+		UI_OpenDialogById(s_UIData, p_DialogID, p_Arg1, p_Flags, p_ParentID);
+		UI_PostMessage(s_UIData);
+
+		return s_UIData;
+	}
+
+	void OnCreateWindow(CreateWindowCallback callback)
+	{
+		createWindowCallbacks.push_back(callback);
+	}
+
+	//Functions that interact with Tags
+
+	void FindUiTagData()
+	{
+		FindUiTagIndices(); //Call me first.
+		FindVoiceChatSpeakingPlayerTagData();
+		FindHUDDistortionTagData();
+		FindHUDResolutionTagData();
+		FindMapImages();
+	}
+
+	bool isPttSoundPlaying;
+	void TogglePTTSound(bool enabled)
+	{
+		if (IsMapLoading() || IsMainMenu())
 			return;
 
-		// TODO: map out these global arrays, content items seems to use same format
+		if (Modules::ModuleVoIP::Instance().VarPTTSoundEnabled->ValueInt == 0)
+			return;
 
-		uint32_t numLevels = Pointer(levelsGlobalPtr + 0x34).Read<uint32_t>();
+		if (isPttSoundPlaying == enabled)
+			return;
 
-		const wchar_t* search[12] = { L"guardian", L"riverworld", L"s3d_avalanche", L"s3d_edge", L"s3d_reactor", L"s3d_turf", L"cyberdyne", L"chill", L"deadlock", L"bunkerworld", L"shrine", L"zanzibar" };
-		const wchar_t* names[12] = { L"Guardian", L"Valhalla", L"Diamondback", L"Edge", L"Reactor", L"Icebox", L"The Pit", L"Narrows", L"High Ground", L"Standoff", L"Sandtrap", L"Last Resort" };
-		// TODO: Get names/descs using string ids? Seems the unic tags have descs for most of the maps
-		const wchar_t* descs[12] = {
-			L"Millennia of tending has produced trees as ancient as the Forerunner structures they have grown around. 2-6 players.",
-			L"The crew of V-398 barely survived their unplanned landing in this gorge...this curious gorge. 6-16 players.",
-			L"Hot winds blow over what should be a dead moon. A reminder of the power Forerunners once wielded. 6-16 players.",
-			L"The remote frontier world of Partition has provided this ancient databank with the safety of seclusion. 6-16 players.",
-			L"Being constructed just prior to the Invasion, its builders had to evacuate before it was completed. 6-16 players.",
-			L"Downtown Tyumen's Precinct 13 offers an ideal context for urban combat training. 4-10 players.",
-			L"Software simulations are held in contempt by the veteran instructors who run these training facilities. 4-10 players.",
-			L"Without cooling systems such as these, excess heat from the Ark's forges would render the construct uninhabitable. 2-8 players.",
-			L"A relic of older conflicts, this base was reactivated after the New Mombasa Slipspace Event. 4-12 players.",
-			L"Once, nearby telescopes listened for a message from the stars. Now, these silos contain our prepared response. 4-12 players.",
-			L"Although the Brute occupiers have been driven from this ancient structure, they left plenty to remember them by. 6-16 players",
-			L"Remote industrial sites like this one are routinely requisitioned and used as part of Spartan training exercises. 4-12 players."
+		static auto Sound_LoopingSound_Stop = (void(*)(uint32_t sndTagIndex, int a2))(0x5DC6B0);
+		static auto Sound_LoopingSound_Start = (void(*)(uint32_t sndTagIndex, int a2, int a3, int a4, char a5))(0x5DC530);
 
-		};
-		for (uint32_t i = 0; i < numLevels; i++)
+		//Make sure the sound exists before playing
+		if (Blam::Tags::TagInstance::IsLoaded('lsnd', pttLsndIndex))
 		{
-			Pointer levelNamePtr = Pointer(levelsGlobalPtr + 0x54 + (0x360 * i) + 0x8);
-			Pointer levelDescPtr = Pointer(levelsGlobalPtr + 0x54 + (0x360 * i) + 0x8 + 0x40);
+			if(enabled)
+				Sound_LoopingSound_Start(pttLsndIndex, -1, 1065353216, 0, 0);
+			else
+				Sound_LoopingSound_Stop(pttLsndIndex, -1);
 
-			wchar_t levelName[0x21] = { 0 };
-			levelNamePtr.Read(levelName, sizeof(wchar_t) * 0x20);
-
-			for (uint32_t y = 0; y < sizeof(search) / sizeof(*search); y++)
-			{
-				if (wcscmp(search[y], levelName) == 0)
-				{
-					memset(levelNamePtr, 0, sizeof(wchar_t) * 0x20);
-					wcscpy_s(levelNamePtr, 0x20, names[y]);
-
-					memset(levelDescPtr, 0, sizeof(wchar_t) * 0x80);
-					wcscpy_s(levelDescPtr, 0x80, descs[y]);
-					break;
-				}
-			}
+			isPttSoundPlaying = enabled;
 		}
 	}
 
-	int HUDResolutionWidth = 0;
-	int HUDResolutionHeight = 0;
-	float HUDResolutionScaleX = 0;
-	float HUDResolutionScaleY = 0;
-	float HUDMotionSensorOffsetX = 0;
-	float HUDBottomVisorOffsetY = 0;
-	bool firstResolutionChange = true;
+	std::vector<std::string> speakingPlayers;
+	static const char* const hex = "0123456789ABCDEF";
+	std::stringstream hexStringStream;
+
+	void ToggleSpeakingPlayerName(std::string name, bool speaking)
+	{
+		//Always remove, in case of duplicates.
+		for (size_t i = 0; i < speakingPlayers.size(); i++)
+		{
+			if (speakingPlayers.at(i) == name)
+			{
+				speakingPlayers.erase(speakingPlayers.begin() + i);
+			}
+		}
+
+		if (speaking)
+			speakingPlayers.push_back(name);
+
+		UpdateSpeakingPlayerWidget(false);
+	}
+
+	void UpdateSpeakingPlayerWidget(bool mapLoaded)
+	{
+		if ((IsMapLoading() || IsMainMenu()) && !mapLoaded)
+			return;
+
+		if (!tagsInitiallyLoaded)
+			return;
+
+		if (!speakingPlayerStringFound)
+			return;
+
+		using Blam::Tags::TagInstance;
+		using Blam::Tags::UI::MultilingualUnicodeStringList;
+		using Blam::Tags::UI::ChudDefinition;
+
+		if (!TagInstance::IsLoaded('unic', hudMessagesUnicIndex))
+			return;
+
+		auto *unic = Blam::Tags::TagInstance(hudMessagesUnicIndex).GetDefinition<Blam::Tags::UI::MultilingualUnicodeStringList>();
+
+		std::string newName;
+
+		if (speakingPlayers.size() < 1) return;
+		else if (speakingPlayers[speakingPlayers.size() - 1].length() < 15) // player names are limited to 15 anyway.
+		{
+			newName = speakingPlayers[speakingPlayers.size() - 1];
+		}
+		else return;
+
+		std::string newHudMessagesStrings;
+		newHudMessagesStrings.reserve(30);
+
+		for (size_t i = 0; i < newName.length(); ++i)
+		{
+			const unsigned char c = newName[i];
+			newHudMessagesStrings.push_back(hex[c >> 4]);
+			newHudMessagesStrings.push_back(hex[c & 15]);
+		}
+
+		//if the speaker name is less than 15 characters, fill the rest of the string with 0.
+		if (newName.length() < (size_t)15)
+			for (int i = newName.length() * 2; i < 30; ++i)
+				newHudMessagesStrings.push_back('0');
+
+		//Now convert the hex string to a byte array and poke!
+		hexStringStream >> std::hex;
+		for (size_t strIndex = 0, dataIndex = 0; strIndex < (size_t)newHudMessagesStrings.length(); ++dataIndex)
+		{
+			// Read out and convert the string two characters at a time
+			const char tmpStr[3] = { newHudMessagesStrings[strIndex++], newHudMessagesStrings[strIndex++], 0 };
+
+			// Reset and fill the string stream
+			hexStringStream.clear();
+			hexStringStream.str(tmpStr);
+
+			// Do the conversion
+			int tmpValue = 0;
+			hexStringStream >> tmpValue;
+
+			if (unic->Data.Size < (dataIndex + speakingPlayerOffset) - 1)
+				return;
+
+			unic->Data.Elements[dataIndex + speakingPlayerOffset] = static_cast<unsigned char>(tmpValue);
+		}
+	}
 
 	void ApplyUIResolution()
 	{
 		if (Modules::ModuleGraphics::Instance().VarUIScaling->ValueInt == 1) {
+			if (!tagsInitiallyLoaded)
+				return;
+
 			using Blam::Tags::TagInstance;
 			using Blam::Tags::UI::ChudGlobalsDefinition;
 			using Blam::Tags::UI::ChudDefinition;
 
-			auto *gameResolution = reinterpret_cast<int *>(0x19106C0);
-			auto *globals = TagInstance(0x01BD).GetDefinition<ChudGlobalsDefinition>();
-			auto *chud = Blam::Tags::TagInstance(0x0C1E).GetDefinition<Blam::Tags::UI::ChudDefinition>();
-			if (!globals || !chud || globals->HudGlobals.Count == 0 || globals->HudGlobals[0].HudAttributes.Count == 0)
+			if (!TagInstance::IsLoaded('chgd', chgdIndex))
+				return;
+			else if (!TagInstance::IsLoaded('chdt', spartanChdtIndex))
 				return;
 
-			// Store initial HUD resolution values the first time the resolution is changed.
-			if (firstResolutionChange)
-			{
-				HUDResolutionWidth = globals->HudGlobals[0].HudAttributes[0].ResolutionWidth;
-				HUDResolutionHeight = globals->HudGlobals[0].HudAttributes[0].ResolutionHeight;
-				HUDResolutionScaleX = globals->HudGlobals[0].HudAttributes[0].HorizontalScale;
-				HUDResolutionScaleY = globals->HudGlobals[0].HudAttributes[0].VerticalScale;
-				HUDMotionSensorOffsetX = globals->HudGlobals[0].HudAttributes[0].MotionSensorOffsetX;
-				// Store bottom visor offset
-				for (auto &widget : chud->HudWidgets)
-				{
-					if (widget.NameStringID == 0x2ABD) // in_helmet_bottom_new
-					{
-						HUDBottomVisorOffsetY = widget.PlacementData[0].OffsetY;
-					}
-				}
-				firstResolutionChange = false;
-			}
+			auto *gameResolution = reinterpret_cast<int *>(0x19106C0);
+			auto *globals = TagInstance(chgdIndex).GetDefinition<ChudGlobalsDefinition>();
+			auto *spartanChud = Blam::Tags::TagInstance(spartanChdtIndex).GetDefinition<Blam::Tags::UI::ChudDefinition>();
+			if (!globals || !spartanChud || globals->HudGlobals.Count == 0 || globals->HudGlobals[0].HudAttributes.Count == 0)
+				return;
 
 			// Make UI match it's original width of 1920 pixels on non-widescreen monitors.
 			// Fixes the visor getting cut off.
@@ -581,7 +486,7 @@ namespace Patches::Ui
 			globals->HudGlobals[0].HudAttributes[0].MotionSensorOffsetY = (float)(globals->HudGlobals[0].HudAttributes[0].ResolutionHeight - (globals->HudGlobals[0].HudAttributes[0].MotionSensorRadius - globals->HudGlobals[0].HudAttributes[0].MotionSensorScale));
 
 			// Search for the visor bottom and fix it if found
-			for (auto &widget : chud->HudWidgets)
+			for (auto &widget : spartanChud->HudWidgets)
 			{
 				if (widget.NameStringID == 0x2ABD) // in_helmet_bottom_new
 				{
@@ -591,10 +496,318 @@ namespace Patches::Ui
 			}
 		}
 	}
+
+	void UpdateHUDDistortion()
+	{
+		if (!validHUDDistortionTags)
+			return;
+
+		Pointer &directorPtr = ElDorito::GetMainTls(GameGlobals::Director::TLSOffset)[0];
+		auto cameraFunc = directorPtr(GameGlobals::Director::CameraFunctionIndex).Read<size_t>();
+
+		if (Modules::ModuleCamera::Instance().VarCameraHideHud->ValueInt != 0)
+		{
+			ToggleHUDDistortion(true);
+			return;
+		}
+
+		switch (cameraFunc) //Add cases as required.
+		{
+			//Unknown cameras:
+			//01672130 - c_camera
+			//01672920 - c_authored_camera
+			//0165A64C - c_director?
+
+		case 0x16724D4: //c_following_camera
+		case 0x16725DC: //c_dead_camera
+		case 0x167265C: //c_orbiting_camera
+		case 0x167280C: //c_scripted_camera
+			ToggleHUDDistortion(false);
+			break;
+
+		case 0x166ACB0: //c_first_person_camera
+			if (Modules::ModuleTweaks::Instance().VarFlatHUD->ValueInt == 1)
+				ToggleHUDDistortion(false);
+			else
+				ToggleHUDDistortion(true);
+			break;
+
+		case 0x165A6E4: //c_null_camera
+		case 0x16726D0: //c_flying_camera
+		case 0x16728A8: //c_static_camera
+		default:
+			ToggleHUDDistortion(true);
+		}
+	}
+
+	void ShowLanBrowser()
+	{
+		typedef void*(__cdecl * UI_AllocPtr)(int size);
+		auto UI_Alloc = reinterpret_cast<UI_AllocPtr>(0xAB4ED0);
+		typedef void*(__fastcall* c_load_game_browser_screen_messagePtr)(void *thisPtr, int unused, int arg0, int arg1, int arg2, int arg3, int arg4, int arg5);
+		auto c_load_game_browser_screen_message = reinterpret_cast<c_load_game_browser_screen_messagePtr>(0xADE0B0);
+		typedef void(*UI_Dialog_QueueLoadPtr)(void *dialog);
+		auto UI_Dialog_QueueLoad = reinterpret_cast<UI_Dialog_QueueLoadPtr>(0xA93450);
+
+		auto dialog = UI_Alloc(0x44);
+		if (!dialog)
+			return;
+		dialog = c_load_game_browser_screen_message(dialog, 0, 0x10355, 0, 4, 0x1000C, 0, 0);
+		if (dialog)
+			UI_Dialog_QueueLoad(dialog);
+	}
 }
 
 namespace
 {
+	void FindUiTagIndices()
+	{
+		using Blam::Tags::Globals::CacheFileGlobalTags;
+		using Blam::Tags::Game::Globals;
+		using Blam::Tags::TagInstance;
+		using Blam::Tags::Objects::Biped;
+		using Blam::Tags::UI::ChudGlobalsDefinition;
+		using Blam::Tags::Game::MultiplayerGlobals;
+
+		auto cfgtInstances = TagInstance::GetInstancesInGroup('cfgt');
+		for (auto &cfgtInstance : cfgtInstances)
+		{
+			auto *cfgtDefinition = cfgtInstance.GetDefinition<CacheFileGlobalTags>();
+			for (size_t globalsTagIndex = 0; globalsTagIndex < cfgtDefinition->globalsTags.Count; globalsTagIndex++)
+			{
+				if (cfgtDefinition->globalsTags[globalsTagIndex].globalsTagReference.GroupTag == 'matg')
+				{
+					auto matgDefinition = TagInstance(cfgtDefinition->globalsTags[globalsTagIndex].globalsTagReference.TagIndex).GetDefinition<Globals>();
+
+					for (size_t interfaceTagsIndex = 0; interfaceTagsIndex < matgDefinition->InterfaceTags.Count; interfaceTagsIndex++)
+					{
+						if (matgDefinition->InterfaceTags[interfaceTagsIndex].HudGlobals.TagIndex != NULL &&
+							matgDefinition->InterfaceTags[interfaceTagsIndex].HudGlobals.GroupTag == 'chgd')
+						{
+							chgdIndex = matgDefinition->InterfaceTags[interfaceTagsIndex].HudGlobals.TagIndex;
+
+							if (!TagInstance::IsLoaded('chgd', chgdIndex))
+								continue;
+
+							auto *chgd = TagInstance(chgdIndex).GetDefinition<ChudGlobalsDefinition>();
+
+							if (chgd->HudGlobals.Count > 1) {
+								if (chgd->HudGlobals[0].ScoreboardHud.TagIndex != NULL)
+									scoreboardChdtIndex = chgd->HudGlobals[0].ScoreboardHud.TagIndex;
+								if (chgd->HudGlobals[0].HudStrings.TagIndex != NULL)
+									hudMessagesUnicIndex = chgd->HudGlobals[0].HudStrings.TagIndex;
+							}
+
+							//Can't break out of all these loops without setting an unnecessary variable.
+							//So if a chgd is found, move to the next loop.
+							goto findBipedChdts;
+						}
+					}
+
+				findBipedChdts:
+
+					for (size_t playerRepresentationIndex = 0; playerRepresentationIndex < matgDefinition->PlayerRepresentation.Count; playerRepresentationIndex++)
+					{
+						if (matgDefinition->PlayerRepresentation[playerRepresentationIndex].ThirdPersonUnit.TagIndex == NULL)
+							continue;
+
+						uint32_t bipdIndex = matgDefinition->PlayerRepresentation[playerRepresentationIndex].ThirdPersonUnit.TagIndex;
+
+						if (!TagInstance::IsLoaded('bipd', bipdIndex))
+							continue;
+
+						auto *bipd = TagInstance(bipdIndex).GetDefinition<Biped>();
+
+						if (bipd->HudInterfaces.Count < 1)
+							continue;
+
+						switch (matgDefinition->PlayerRepresentation[playerRepresentationIndex].Name)
+						{
+						case 4376: //mp_spartan
+							spartanChdtIndex = bipd->HudInterfaces[0].UnitHudInterface.TagIndex;
+							break;
+							//case 4377: //mp_elite
+							//	eliteChdtIndex = bipd->HudInterfaces[0].UnitHudInterface.TagIndex;
+							//	break;
+							//case 4379: //monitor
+							//	monitorChdtIndex = bipd->HudInterfaces[0].UnitHudInterface.TagIndex;
+							//	break;
+						default:
+							continue;
+						}
+
+						//If all the tag indices are found, move on.
+						if (spartanChdtIndex != NULL /*&& eliteChdtIndex != NULL && monitorChdtIndex != NULL*/)
+							goto findPttLsnd;
+					}
+
+				findPttLsnd:
+
+					if (matgDefinition->MultiplayerGlobals.TagIndex == NULL)
+						return;
+					if (!TagInstance::IsLoaded('mulg', matgDefinition->MultiplayerGlobals.TagIndex))
+						return;
+
+					auto *mulg = TagInstance(matgDefinition->MultiplayerGlobals.TagIndex).GetDefinition<MultiplayerGlobals>();
+
+					if (mulg->Runtime.Count < 1 || mulg->Runtime[0].LoopingSounds.Count < 1 || mulg->Runtime[0].LoopingSounds[0].LoopingSound.TagIndex == NULL)
+						return;
+
+					pttLsndIndex = mulg->Runtime[0].LoopingSounds[0].LoopingSound.TagIndex;
+
+					return;
+				}
+			}
+		}
+	}
+
+	void FindMapImages()
+	{
+		using Blam::Tags::TagInstance;
+		using Blam::Tags::UI::GfxTexturesList;
+
+		auto gfxtInstances = TagInstance::GetInstancesInGroup('gfxt');
+		for (auto &gfxtInstance : gfxtInstances)
+		{
+			//mapID|BitmapIndex
+			std::unordered_map<int, int> tempMapImages = std::unordered_map<int, int>();
+
+			auto *gfxtDefinition = gfxtInstance.GetDefinition<GfxTexturesList>();
+			for each (GfxTexturesList::Texture texture in gfxtDefinition->Textures)
+			{
+				char *output = strstr(texture.FileName, "placeholder");
+
+				if (output)
+				{
+					multiplayerPlaceholderIndex = texture.Bitmap.TagIndex;
+					continue;
+				}
+
+				try
+				{
+					int mapID = std::stoi(texture.FileName);
+					tempMapImages.insert(std::pair<int, int>(mapID, texture.Bitmap.TagIndex));
+					continue;
+				}
+				catch (...)
+				{
+					goto invalid_gfxt;
+				}
+			}
+
+			mapImages = tempMapImages;
+			foundMapImages = true;
+			return;
+
+		invalid_gfxt:
+			continue;
+		}
+	}
+
+	void FindVoiceChatSpeakingPlayerTagData()
+	{
+		using Blam::Tags::TagInstance;
+		using Blam::Tags::UI::MultilingualUnicodeStringList;
+
+		if (!TagInstance::IsLoaded('unic', hudMessagesUnicIndex))
+			return;
+
+		auto *unic = Blam::Tags::TagInstance(hudMessagesUnicIndex).GetDefinition<Blam::Tags::UI::MultilingualUnicodeStringList>();
+
+		//go through string blocks backwards to find speaking_player, as it should be at the end.
+		for (int stringBlockIndex = unic->Strings.Count - 1; stringBlockIndex > -1; stringBlockIndex--)
+			if (SPEAKING_PLAYER_STRING_NAME == (std::string)unic->Strings[stringBlockIndex].StringIDStr)
+			{
+				speakingPlayerOffset = unic->Strings[stringBlockIndex].Offsets[0]; //read the english offset,
+				speakingPlayerStringID = unic->Strings[stringBlockIndex].StringID;
+				break;
+			}
+
+		//If the speaking_player string cannot be found, RIP. This shouldn't happen unless tags don't have correct modifications.
+		if (speakingPlayerOffset != NULL)
+			speakingPlayerStringFound = true;
+		else
+			speakingPlayerStringFound = false;
+	}
+
+	void FindHUDDistortionTagData()
+	{
+		using Blam::Tags::UI::ChudGlobalsDefinition;
+		using Blam::Tags::TagInstance;
+
+		if (!TagInstance::IsLoaded('chgd', chgdIndex))
+			return;
+
+		auto *chgd = Blam::Tags::TagInstance(chgdIndex).GetDefinition<ChudGlobalsDefinition>();
+
+		for each (ChudGlobalsDefinition::HudGlobal hudGlobal in chgd->HudGlobals)
+		{
+			if (hudGlobal.HudAttributes.Count < 1)
+				continue;
+
+			hudDistortionDirection[hudGlobal.Biped] = hudGlobal.HudAttributes[0].WarpDirection;
+		}
+		firstHUDDistortionUpdate = false;
+		validHUDDistortionTags = true;
+	}
+
+	void FindHUDResolutionTagData()
+	{
+		using Blam::Tags::TagInstance;
+		using Blam::Tags::UI::ChudGlobalsDefinition;
+		using Blam::Tags::UI::ChudDefinition;
+
+		if (!TagInstance::IsLoaded('chgd', chgdIndex))
+			return;
+		else if (!TagInstance::IsLoaded('chdt', spartanChdtIndex))
+			return;
+
+		auto *globals = TagInstance(chgdIndex).GetDefinition<ChudGlobalsDefinition>();
+		auto *spartanChud = Blam::Tags::TagInstance(spartanChdtIndex).GetDefinition<Blam::Tags::UI::ChudDefinition>();
+
+		// Store initial HUD resolution values the first time the resolution is changed.
+		HUDResolutionWidth = globals->HudGlobals[0].HudAttributes[0].ResolutionWidth;
+		HUDResolutionHeight = globals->HudGlobals[0].HudAttributes[0].ResolutionHeight;
+		HUDResolutionScaleX = globals->HudGlobals[0].HudAttributes[0].HorizontalScale;
+		HUDResolutionScaleY = globals->HudGlobals[0].HudAttributes[0].VerticalScale;
+		HUDMotionSensorOffsetX = globals->HudGlobals[0].HudAttributes[0].MotionSensorOffsetX;
+		// Store bottom visor offset
+		for (auto &widget : spartanChud->HudWidgets)
+		{
+			if (widget.NameStringID == 0x2ABD) // in_helmet_bottom_new
+			{
+				HUDBottomVisorOffsetY = widget.PlacementData[0].OffsetY;
+			}
+		}
+	}
+
+	void ToggleHUDDistortion(bool enabled)
+	{
+		if (!validHUDDistortionTags)
+			return;
+
+		if (enabled == lastDistortionEnabledValue)
+			return;
+
+		using Blam::Tags::UI::ChudGlobalsDefinition;
+		using Blam::Tags::TagInstance;
+
+		//Return if the tag cant be found, happens during loading.
+		if (!TagInstance::IsLoaded('chgd', chgdIndex))
+			return;
+
+		auto *chgd = Blam::Tags::TagInstance(chgdIndex).GetDefinition<ChudGlobalsDefinition>();
+
+		for (size_t hudGlobalsIndex = 0; hudGlobalsIndex < chgd->HudGlobals.Count; hudGlobalsIndex++)
+		{
+			if (chgd->HudGlobals[hudGlobalsIndex].HudAttributes.Count < 1)
+				continue;
+
+			chgd->HudGlobals[hudGlobalsIndex].HudAttributes[0].WarpDirection = enabled ? hudDistortionDirection[chgd->HudGlobals[hudGlobalsIndex].Biped] : 0;
+		}
+		lastDistortionEnabledValue = enabled;
+	}
+
 	void __fastcall UI_MenuUpdateHook(void* a1, int unused, int menuIdToLoad)
 	{
 		auto& dorito = ElDorito::Instance();
@@ -733,23 +946,6 @@ namespace
 		}
 	}
 
-	void ShowLanBrowser()
-	{
-		typedef void*(__cdecl * UI_AllocPtr)(int size);
-		auto UI_Alloc = reinterpret_cast<UI_AllocPtr>(0xAB4ED0);
-		typedef void*(__fastcall* c_load_game_browser_screen_messagePtr)(void *thisPtr, int unused, int arg0, int arg1, int arg2, int arg3, int arg4, int arg5);
-		auto c_load_game_browser_screen_message = reinterpret_cast<c_load_game_browser_screen_messagePtr>(0xADE0B0);
-		typedef void(*UI_Dialog_QueueLoadPtr)(void *dialog);
-		auto UI_Dialog_QueueLoad = reinterpret_cast<UI_Dialog_QueueLoadPtr>(0xA93450);
-
-		auto dialog = UI_Alloc(0x44);
-		if (!dialog)
-			return;
-		dialog = c_load_game_browser_screen_message(dialog, 0, 0x10355, 0, 4, 0x1000C, 0, 0);
-		if (dialog)
-			UI_Dialog_QueueLoad(dialog);
-	}
-
 	void __fastcall c_main_menu_screen_widget_item_select_hook(void* thisptr, void* unused, int a2, int a3, void* a4, void* a5)
 	{
 		static auto  c_main_menu_screen_widget_item_select = (void(__thiscall*)(void* thisptr, int a2, int a3, void* dataSource, void* a5))(0xAE77D0);
@@ -778,8 +974,8 @@ namespace
 					ShowLanBrowser();
 					return;
 
-				case 4: // Settings
-					Web::Ui::ScreenLayer::Show("settings", "{}");
+				case 4: // Customization
+					Web::Ui::ScreenLayer::Show("profile_settings", "{}");
 					return;
 
 				case 5: // Exit
@@ -791,6 +987,67 @@ namespace
 		}
 
 		c_main_menu_screen_widget_item_select(thisptr, a2, a3, a4, a5);
+	}
+
+	unsigned int selectionMenuMapID = 0;
+	__declspec(naked) void MenuSelectedMapIDChangedHook()
+	{
+		__asm
+		{
+			mov selectionMenuMapID, esi
+
+			//perform original instruction
+			mov ecx, [ebp - 0x52C]
+
+			//return to ED code
+			mov esi, 0xADA104
+			jmp esi
+		}
+	}
+
+	void __fastcall c_gui_bitmap_widget_update_render_data_hook(void* thisptr, void* unused, void* renderData, int a3, int a4, int a5, int a6, int a7)
+	{
+		static auto c_gui_bitmap_widget_get_render_data = (void(__thiscall*)(void* thisptr, void* renderData, int a3, int a4, char a5, char a6, char a7))(0x00B167B0);
+
+		auto name = Pointer(thisptr)(0x40).Read<uint32_t>();
+		c_gui_bitmap_widget_get_render_data(thisptr, renderData, a3, a4, a5, a6, a7);
+
+		if (!foundMapImages)
+			return;
+
+		if (name != 67196 && name != 67149) // unknown_film_image, woohoo!
+			return;
+
+		static int bitmapIndex = 0;
+		static int mapID = 0;
+
+		if (name == 67196)
+		{
+			auto session = Blam::Network::GetActiveSession();
+
+			if (session && session->IsEstablished())
+				mapID = session->Parameters.MapVariant.MapID;
+		}
+		else if (name == 67149)
+		{
+			mapID = selectionMenuMapID;
+		}
+
+
+		try
+		{
+			bitmapIndex = mapImages.at(mapID);
+		}
+		catch (...)
+		{
+			bitmapIndex = multiplayerPlaceholderIndex;
+		}
+
+
+		if (!Blam::Tags::TagInstance::IsLoaded('bitm', bitmapIndex))
+			return;
+
+		*(uint32_t*)((uint8_t*)renderData + 0x2C) = bitmapIndex; // bitmap tag index
 	}
 
 	void ResolutionChangeHook()
@@ -818,6 +1075,26 @@ namespace
 		auto vtable = *reinterpret_cast<void***>(data);
 		auto Get = reinterpret_cast<UI_OrderedDataSource_GetPtr>(vtable[11]);
 		return Get(data, 0, index, key, result);
+	}
+
+	int __fastcall UI_SetPlayerDesiredTeamHook(void *thisPtr, int unused, int a2, int teamIndex, int a4)
+	{
+		localDesiredTeam = teamIndex;
+		teamChangeTicks = 0;
+
+		typedef int(__thiscall *UI_SetPlayerDesiredTeamFunc)(void* thisPtr, int a2, int a3, int a4);
+		UI_SetPlayerDesiredTeamFunc UI_SetPlayerDesiredTeam = reinterpret_cast<UI_SetPlayerDesiredTeamFunc>(0xB25C30);
+		return UI_SetPlayerDesiredTeam(thisPtr, a2, teamIndex, a4);
+	}
+
+	void OnUiInputUpdated()
+	{
+		auto isUsingController = *(bool*)0x0244DE98;
+
+		if (isUsingController && Blam::Input::GetActionState(Blam::Input::eGameActionUiB)->Ticks == 1) //reset desired team after cancel
+			localDesiredTeam = -1;
+		else if (Blam::Input::GetKeyTicks(Blam::Input::KeyCode::eKeyCodeB, Blam::Input::InputType::eInputTypeGame) == 1) //kbm
+			localDesiredTeam = -1;
 	}
 
 	void __fastcall UI_UpdateRosterColorsHook(void *thisPtr, int unused, void *a0)
@@ -883,6 +1160,20 @@ namespace
 				auto teamIndex = 0;
 				if (teamsEnabled && UI_OrderedDataSource_Get(data, itemIndex, str_team, &teamIndex) && teamIndex >= 0)
 				{
+					//TODO: find a less expensive way of checking for the player's widget
+					wchar_t* widgetPlayerName = reinterpret_cast<wchar_t*>(reinterpret_cast<uint8_t*>(data) + itemIndex * 0x1678 + 0x168);
+					if (Utils::String::ThinString(widgetPlayerName) == Utils::String::ThinString(session->MembershipInfo.GetLocalPlayerSession().Properties.DisplayName))
+					{
+						if (localDesiredTeam > -1 && localDesiredTeam < 8)
+						{
+							teamChangeTicks++;
+							if (teamChangeTicks > 120)
+								localDesiredTeam = -1;
+							else
+								teamIndex = localDesiredTeam;
+						}
+					}
+
 					if (nameWidget)
 						UI_ColorWidgetWithPlayerColor(nameWidget, teamIndex, true);
 					if (baseColorWidget)
@@ -924,76 +1215,42 @@ namespace
 
 	bool UpdateH3HUDImpl(int playerMappingIndex)
 	{
-		using TagInstance = Blam::Tags::TagInstance;
-		using WeaponDefinition = Blam::Tags::Items::Weapon;
-
-		static auto GetPlayerIndexFromPlayerMappingIndex = (uint32_t(__cdecl*)(int playerMappingIndex))(0x00589C60);
-		static auto GetPlayerControlsAction = (int(__cdecl*)(int playerMappingIndex))(0x5D0BD0);
-		static auto DisplayHUDMessage = (void(__cdecl *)(int playerMappingIndex, uint32_t stringId, int a3, int a4))(0x00A964E0);
-
-		auto actionStatePtr = Pointer(GetPlayerControlsAction(playerMappingIndex));
-		auto actionType = actionStatePtr.Read<uint16_t>();
-		auto actionObjectIndex = actionStatePtr(0x4).Read<uint32_t>();
-		auto actionFlags = actionStatePtr(0x2).Read<uint16_t>();
-
-		if (actionType != 1 && actionType != 9) // weapon pickup/swap
-			return false;
-
-		auto& players = Blam::Players::GetPlayers();
-		auto& objects = Blam::Objects::GetObjects();
-
-		auto playerIndex = GetPlayerIndexFromPlayerMappingIndex(playerMappingIndex);
-		auto player = players.Get(playerIndex);
-		assert(player);
-
-		auto unitObjectPtr = Pointer(objects.Get(player->SlaveUnit))[0xC];
-		assert(unitObjectPtr);
-
-		auto actionWeaponObjectPtr = Pointer(objects.Get(actionObjectIndex))[0xC];
-		if (!actionWeaponObjectPtr)
-			return false;
-
-		auto equippedWeaponIndex = unitObjectPtr(0x2CA).Read<uint8_t>();
-		auto actionWeapDef = TagInstance(actionWeaponObjectPtr.Read<uint32_t>()).GetDefinition<WeaponDefinition>();
-		if (!actionWeapDef)
-			return false;
-
-		auto secondaryWeaponObjectIndex = unitObjectPtr(0x2D0 + 4 * 1).Read<uint32_t>();
-		auto primaryWeaponObjectIndex = unitObjectPtr(0x2D0 + 4 * 0).Read<uint32_t>();
-		auto equippedWeaponObjectIndex = unitObjectPtr(0x2D0 + 4 * equippedWeaponIndex).Read<uint32_t>();
-
-		if (primaryWeaponObjectIndex == -1 || secondaryWeaponObjectIndex == -1 || actionType == 9)
+		struct ControlGlobalsAction
 		{
-			DisplayHUDMessage(playerMappingIndex, actionWeapDef->PickupMessage, -1, 0);
-			return true;
-		}
+			uint16_t Type;
+			uint16_t Flags;
+			uint32_t ObjectIndex;
+			// ...
+		};
 
-		if (equippedWeaponIndex == -1)
+		static auto GetPlayerControlsAction = (ControlGlobalsAction*(*)(int playerMappingIndex))(0x5D0BD0);
+		static auto HUD_DisplayHUDMessage = (void(*)(unsigned int playerMappingIndex, int stringId, int a3, int alignment))(0x00A964E0);
+
+		auto action = GetPlayerControlsAction(playerMappingIndex);
+
+		if (action->Type != 9 && action->Type != 1)
+			return false;
+		auto actionWeapObject = Blam::Objects::Get(action->ObjectIndex);
+		if (!actionWeapObject)
 			return false;
 
-		auto equippedWeaponObjectPtr = Pointer(objects.Get(equippedWeaponObjectIndex))[0xC];
-		if (!equippedWeaponObjectPtr)
-			return false;
+		auto actionWeapDef = Blam::Tags::TagInstance(actionWeapObject->TagIndex).GetDefinition<Blam::Tags::Items::Weapon>();
 
-		auto equippedWeapDef = TagInstance(equippedWeaponObjectPtr.Read<uint32_t>()).GetDefinition<WeaponDefinition>();
-		if (!equippedWeapDef)
-			return false;
-
-		if (uint32_t(equippedWeapDef->WeaponFlags1) & uint32_t(WeaponDefinition::Flags1::CanBeDualWielded) &&
-			uint32_t(actionWeapDef->WeaponFlags1) & uint32_t(WeaponDefinition::Flags1::CanBeDualWielded))
-		{
-			if (actionFlags != (1 << 1))
-				DisplayHUDMessage(playerMappingIndex, actionWeapDef->PickupOrDualWieldMessage, -1, 1);
-			if (actionFlags != (1 << 3) && actionFlags != (1 << 2))
-				DisplayHUDMessage(playerMappingIndex, actionWeapDef->SwapMessage, -1, 0);
-			return true;
-		}
+		if (action->Flags & 1)
+			HUD_DisplayHUDMessage(playerMappingIndex, actionWeapDef->PickupMessage, -1, 0);
+		else if (action->Flags & 2)
+			HUD_DisplayHUDMessage(playerMappingIndex, actionWeapDef->SwapMessage, -1, 0);
 		else
-		{
-			DisplayHUDMessage(playerMappingIndex, -1, -1, 1);
-			DisplayHUDMessage(playerMappingIndex, actionWeapDef->SwapMessage, -1, 0);
-			return true;
-		}
+			HUD_DisplayHUDMessage(playerMappingIndex, -1, -1, 0);
+
+		if (action->Flags & 4)
+			HUD_DisplayHUDMessage(playerMappingIndex, actionWeapDef->PickupOrDualWieldMessage, -1, 1);
+		else if (action->Flags & 8)
+			HUD_DisplayHUDMessage(playerMappingIndex, actionWeapDef->SwapOrDualWieldMessage, -1, 1);
+		else
+			HUD_DisplayHUDMessage(playerMappingIndex, -1, -1, 1);
+
+		return true;
 	}
 
 	void __cdecl UI_UpdateH3HUDHook(int playerMappingIndex)
@@ -1091,5 +1348,362 @@ namespace
 	{
 		if (!Modules::ModuleGame::Instance().VarHideH3UI->ValueInt)
 			((void(__thiscall*)(void* thisptr))(0xA290A0))(thisptr);
+	}
+
+	__declspec(naked) void CameraModeChangedHook()
+	{
+		__asm
+		{
+			//execute custom code
+			call UpdateHUDDistortion
+
+			//perform original instruction
+			movss xmm0, [ebp + 0xC]
+
+			//return to eldorado code
+			ret
+		}
+	}
+
+	__declspec(naked) void StateDataFlags2Hook()
+	{
+		__asm
+		{
+			call GetBrokenChudStateFlags2Values
+			or word ptr[edi + 57Ah], ax
+
+			//Since biped flags are regularly updated,
+			//Fix flags additions to flags33 here too, to also be regularly updated.
+			call GetBrokenChudStateFlags33Values
+			or [edi + 5B0h], eax
+
+			mov eax, 0xA86FC8
+			jmp eax
+		}
+	}
+
+	__declspec(naked) void StateDataFlags3Hook()
+	{
+		__asm
+		{
+			call GetBrokenChudStateFlags3Values
+			or word ptr[edi + 57Ch], ax
+			mov eax, 0xA86EEF
+			jmp eax
+		}
+	}
+
+	__declspec(naked) void StateDataFlags5Hook()
+	{
+		__asm
+		{
+			call GetBrokenChudStateFlags5Values
+			or word ptr[edi + 580h], ax
+			mov eax, 0xA870A6
+			jmp eax
+		}
+	}
+
+	__declspec(naked) void StateDataFlags21Hook()
+	{
+		__asm
+		{
+			call GetBrokenChudStateFlags21Values
+			or word ptr[edi + 5A0h], ax
+			cmp byte ptr[edi + 0x00062C], 00 //perform original instruction
+			mov eax, 0xA87BF7
+			jmp eax
+		}
+	}
+
+	//Called if equipment held
+	__declspec(naked) void StateDataFlags31Hook()
+	{
+		__asm
+		{
+			call GetBrokenChudStateFlags31Values
+			or [edi + 5ACh], eax
+			mov eax, 0xA85A71
+			jmp eax
+		}
+	}
+
+	//All values in this bitfield are broken.
+	int GetBrokenChudStateFlags2Values()
+	{
+		using Blam::Players::PlayerDatum;
+
+		auto sub_53A6F0 = (void*(*)(uint32_t))(0x53A6F0);
+
+		void* playerRepresentation = sub_53A6F0(Blam::Players::GetLocalPlayer(0).Index());
+
+		auto nameId = *(uint32_t*)playerRepresentation;
+		switch (nameId)
+		{
+		case 0x111B: // monitor
+			return 4;
+		case 0x1119: //mp_elite
+		case 0xCC: // dervish
+			return 2;
+		default:
+			return 1;
+		}
+	}
+
+	//All voice values in this bitfield are broken.
+	int GetBrokenChudStateFlags3Values()
+	{
+		int flags = 0;
+
+		Modules::ModuleVoIP &voipModule = Modules::ModuleVoIP::Instance();
+
+		if (!voipModule.VarVoipEnabled->ValueInt == 0)
+		{
+			if (voipModule.voipConnected)
+			{
+				if (voipModule.VarPTTEnabled->ValueInt == 0)
+				{
+					if (voipModule.voiceDetected)
+						flags |= 0x400; //talking
+					else
+						flags |= 0x200; //not_talking
+				}
+				else
+				{
+					if (Blam::Input::GetActionState(Blam::Input::eGameActionVoiceChat)->Ticks > 0)
+						flags |= 0x400; //talking
+					else
+					{
+						flags |= 0x80; //tap_to_talk
+						flags |= 0x200; //not_talking
+					}
+				}
+			}
+			else
+				flags |= 0x40; //taling_disabled
+		}
+
+		return flags;
+	}
+
+	//All voice values in this bitfield are broken.
+	int GetBrokenChudStateFlags5Values()
+	{
+		int flags = 0;
+
+		if (speakingPlayers.size() > 0)
+			flags |= 8; //SomeoneIsTalking
+
+		return flags;
+	}
+
+	//All voice values in this bitfield are broken.
+	int GetBrokenChudStateFlags21Values()
+	{
+		int flags = 0;
+
+		Modules::ModuleVoIP &voipModule = Modules::ModuleVoIP::Instance();
+
+		if (!voipModule.VarVoipEnabled->ValueInt == 0)
+		{
+			if (voipModule.voipConnected)
+			{
+				if (voipModule.VarPTTEnabled->ValueInt == 0)
+				{
+					if (voipModule.voiceDetected)
+						flags |= 0x400; //Bit10
+				}
+				else
+				{
+					if (Blam::Input::GetActionState(Blam::Input::eGameActionVoiceChat)->Ticks > 0)
+						flags |= 0x400; //Bit10
+				}
+			}
+		}
+
+		return flags;
+	}
+
+	int lastEqipIndex;
+	int GetBrokenChudStateFlags31Values()
+	{
+		int flags;
+
+		using ObjectArray = Blam::DataArray<Blam::Objects::ObjectHeader>;
+		using Blam::Players::PlayerDatum;
+
+		auto objectsPtr = (ObjectArray**)ElDorito::GetMainTls(0x448);
+
+		if (!objectsPtr)
+			return 0;
+
+		PlayerDatum *playerDatum = Blam::Players::GetPlayers().Get(Blam::Players::GetLocalPlayer(0));
+
+		auto unitObjectDatum = (*objectsPtr)->Get(playerDatum->SlaveUnit);
+		auto unitObject = unitObjectDatum->Data;
+
+		if (!unitObjectDatum || !unitObject)
+			return 0;
+
+		auto primaryEquipmentObjectIndex = Pointer(unitObject)(0x2F0).Read<uint32_t>();
+
+		if (primaryEquipmentObjectIndex == -1)
+			return 0;
+
+		auto itemObjectDatum = (*objectsPtr)->Get(primaryEquipmentObjectIndex);
+		if (!itemObjectDatum)
+			return 0;
+
+		auto itemTagIndex = Pointer(itemObjectDatum->Data).Read<uint32_t>();
+
+		if (itemTagIndex != lastEqipIndex)
+			flags = 0;
+		else
+			flags = 0x100;
+
+		lastEqipIndex = itemTagIndex;
+
+		return flags;
+	}
+
+	int GetBrokenChudStateFlags33Values()
+	{
+		int flags = 0;
+
+		//Team and FFA flags that were in Flags 1 in halo 3 are now here.
+		auto session = Blam::Network::GetActiveSession();
+		if (session && session->IsEstablished())
+			if (session->HasTeams())
+				flags |= 0x2000; //Bit13, was inactive, now Teams Enabled
+			else
+				flags |= 0x1000; //Bit12, was inactive, now Teams Disabled
+
+		return flags;
+	}
+
+	bool __fastcall c_gui_map_category_datasource_init(c_gui_map_category_datasource *thisptr, void* unused, int datasource)
+	{
+		static auto c_gui_data_init = ((bool(__thiscall*)(void*, int))(0x00AD52F0));
+		static auto maps_get_multiplayer_map_ids = (void(*)(int* pMapIds, int* pCount))(0x0054BEE0);
+		static auto maps_get_multiplayer_level = (bool(*)(int mapId, uint8_t* data))(0x0054CB00);
+		static auto sub_54BFD0 = (bool(*)(int mapId))(0x54BFD0);
+
+		if (!c_gui_data_init(thisptr, datasource))
+			return false;
+
+		int mapIds[50];
+		int numMapIds = 50;
+		maps_get_multiplayer_map_ids(mapIds, &numMapIds);
+
+		thisptr->ItemCount = 0;
+		for (auto i = 0; i < numMapIds; i++)
+		{
+			uint8_t levelInfo[0x360];
+			if (sub_54BFD0(mapIds[i]) && maps_get_multiplayer_level(mapIds[i], levelInfo))
+			{
+				auto& item = thisptr->items[thisptr->ItemCount];
+
+				item.Type = 2;
+				item.MapId = mapIds[i];
+				wcsncpy(item.Name, (wchar_t*)(levelInfo + 0x8), 48);
+				wcsncpy(item.Description, (wchar_t*)(levelInfo + 0x48), 256);
+				item.field_268 = *(uint32_t*)(levelInfo + 0x34c);
+				thisptr->ItemCount++;
+			}
+		}
+
+		std::qsort(thisptr->items, thisptr->ItemCount, 0x26c, (int(*)(const void*, const void*))0xADA1D0);
+		return true;
+	}
+
+	bool __fastcall c_gui_game_variant_category_datasource_init(c_gui_game_variant_category_datasource *thisptr, void* unused, int datasource)
+	{
+		static auto c_gui_data_init = ((bool(__thiscall*)(void*, int))(0x00AD52F0));
+		static auto sub_A84200 = (void*(*)(int a1))(0xA84200);
+		static auto sub_ADB130 = (void*(__thiscall*)(c_gui_game_variant_category_datasource *thisptr, void* a2, int index))(0xADB130);
+
+		if (!c_gui_data_init(thisptr, datasource))
+			return false;
+
+		auto tagsource = sub_A84200(0x201); // game_variant
+		if (!tagsource)
+			return false;
+
+		thisptr->ItemCount = 0;
+		auto index = 0;
+		do
+		{
+			if (index)
+			{
+				if (index != 5)
+					sub_ADB130(thisptr, tagsource, index);
+			}
+			++index;
+		} while (index < 11);
+
+		std::qsort(thisptr->items, thisptr->ItemCount, 0x26c, (int(*)(const void*, const void*))0xADB280);
+		return true;
+	}
+
+	void __stdcall OnLobbySwitchNetworkMode()
+	{
+		Web::Ui::ScreenLayer::Show("server_settings", "{}");
+	}
+
+	__declspec(naked) void c_gui_screen_pregame_lobby_switch_network_hook()
+	{
+		__asm
+		{
+			call OnLobbySwitchNetworkMode
+
+			// jump to cleanup and return
+			mov eax, 0xB21F5B
+			jmp eax
+		}
+	}
+
+	void __fastcall c_gui_alert_manager__show(void *thisptr, void *unused, uint32_t name, int a3, wchar_t *customMessage, int profileIndex, bool a6, int a7)
+	{
+		struct Alert
+		{
+			uint32_t Name;
+			uint8_t Flags;
+			uint8_t Unknown05;
+			uint8_t Icon;
+			uint8_t Unknown07;
+			uint32_t Title;
+			uint32_t Body;
+		};
+
+		const auto ui_get_shared_globals_definition = (uint8_t*(*)())(0x00A84D20);
+		const auto ui_resolve_string = (char*(*)(uint32_t unicTagIndex, uint32_t stringId, int lanquageId))(0x0051E290);
+		const auto ui_get_prefered_lanquage = (int(*)())(0x0052FC40);
+
+		auto wigl = ui_get_shared_globals_definition();
+		if (!wigl)
+			return;
+
+		const auto alertStrings = 0x00000989;
+
+		auto &alerts = *(Blam::Tags::TagBlock<Alert>*)(wigl + 0x9C);
+		for (auto& alert : alerts)
+		{
+			if (alert.Name == name)
+			{
+				auto title = ui_resolve_string(alertStrings, alert.Title, ui_get_prefered_lanquage());
+				auto body = ui_resolve_string(alertStrings, alert.Body, ui_get_prefered_lanquage());
+				if (customMessage)
+				{
+					auto customMessageStr = Utils::String::ThinString(customMessage);
+					Web::Ui::ScreenLayer::ShowAlert(title, customMessageStr.c_str(), Web::Ui::ScreenLayer::AlertIcon(alert.Icon));
+				}
+				else
+				{
+					Web::Ui::ScreenLayer::ShowAlert(title, body, Web::Ui::ScreenLayer::AlertIcon(alert.Icon));
+				}
+
+				return;
+			}
+		}
 	}
 }

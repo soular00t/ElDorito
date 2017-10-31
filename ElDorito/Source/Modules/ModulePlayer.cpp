@@ -1,16 +1,18 @@
 #include <ctime>
 #include "ModulePlayer.hpp"
 #include "../ElDorito.hpp"
-#include "../Patches/Armor.hpp"
+#include "../Game/Armor.hpp"
 #include "../Patches/PlayerRepresentation.hpp"
 #include "../Patches/PlayerUid.hpp"
-#include "../Patches/Armor.hpp"
+#include <iomanip>
+#include <algorithm>
+#include <unordered_set>
 
 namespace
 {
 	bool VariablePlayerArmorUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
-		Patches::Armor::RefreshUiPlayer();
+		Game::Armor::RefreshUiPlayer();
 		return true;
 	}
 
@@ -24,19 +26,54 @@ namespace
 		return true;
 	}
 
+	bool VariablePlayerServiceTagUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (!Arguments.size())
+			return false;
+
+		auto value = Arguments[0];
+		std::transform(value.begin(), value.end(), value.begin(), toupper);
+
+		if (!Modules::ModulePlayer::ValidServiceTag(value))
+		{
+			returnInfo = "Invalid service tag!";
+			return false;
+		}
+
+		auto &modulePlayer = Modules::ModulePlayer::Instance();
+		modulePlayer.VarPlayerServiceTag->ValueString = value;
+
+#ifdef _DEBUG
+		Patches::PlayerRepresentation::UpdateLocalRepresentation();
+#endif
+		return true;
+	}
+
+	bool VariablePlayerGenderUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (!Arguments.size() || (Arguments[0].compare("male") && Arguments[0].compare("female")))
+			return false;
+#ifdef _DEBUG
+		Patches::PlayerRepresentation::UpdateLocalRepresentation();
+#endif
+		return true;
+	}
+
 	bool VariablePlayerRepresentationUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
+#ifdef _DEBUG
 		Patches::PlayerRepresentation::UpdateLocalRepresentation();
-		Patches::Armor::RefreshUiPlayer();
+#endif
+		Game::Armor::RefreshUiPlayer();
 		return true;
 	}
 
 	bool CommandPlayerPrintUID(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		auto uid = Patches::PlayerUid::Get();
-		std::string uidStr;
-		Utils::String::BytesToHexString(&uid, sizeof(uint64_t), uidStr);
-		returnInfo = "Player UID: 0x" + uidStr;
+		std::stringstream ss;
+		ss << std::setw(16) << std::setfill('0') << std::hex << uid << std::dec << std::setw(0);
+		returnInfo = "Player UID: 0x" + ss.str();
 		return true;
 	}
 
@@ -60,7 +97,7 @@ namespace
 			return false;
 		}
 
-		Patches::Armor::SetUiPlayewrModelTransform(&position, nullptr);
+		Game::Armor::SetUiPlayerModelTransform(&position, nullptr);
 
 		return true;
 	}
@@ -74,9 +111,26 @@ namespace
 			return false;
 		}
 
-		Patches::Armor::SetUiPlayewrModelTransform(nullptr, &rotationAngle);
+		Game::Armor::SetUiPlayerModelTransform(nullptr, &rotationAngle);
 
 		return true;
+	}
+
+	bool CommandSetCarryType(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		Pointer &playerCtrlGlobalsPtr = ElDorito::GetMainTls(GameGlobals::Input::TLSOffset)[0](GameGlobals::Input::CarryType);
+		playerCtrlGlobalsPtr.WriteFast<uint8_t>(!playerCtrlGlobalsPtr.Read<uint8_t>());
+		return true;
+	}
+
+	std::string GenerateRandomServiceTag()
+	{
+		std::string tag(4, 0);
+		tag[0] = rand() % 26 + 'A';
+		tag[1] = rand() % 10 + '0';
+		tag[2] = rand() % 10 + '0';
+		tag[3] = rand() % 10 + '0';
+		return tag;
 	}
 }
 
@@ -84,27 +138,27 @@ namespace Modules
 {
 	ModulePlayer::ModulePlayer() : ModuleBase("Player")
 	{
-		VarArmorAccessory = AddVariableString("Armor.Accessory", "armor_accessory", "Armor ID for player accessory", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
-		VarArmorArms = AddVariableString("Armor.Arms", "armor_arms", "Armor ID for player arms", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
-		VarArmorChest = AddVariableString("Armor.Chest", "armor_chest", "Armor ID for player chest", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
 		VarArmorHelmet = AddVariableString("Armor.Helmet", "armor_helmet", "Armor ID for player helmet", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
-		VarArmorLegs = AddVariableString("Armor.Legs", "armor_legs", "Armor ID for player legs", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
-		VarArmorPelvis = AddVariableString("Armor.Pelvis", "armor_pelvis", "Armor ID for player pelvis", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
-		VarArmorShoulders = AddVariableString("Armor.Shoulders", "armor_shoulders", "Armor ID for player shoulders", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
+		VarArmorChest = AddVariableString("Armor.Chest", "armor_chest", "Armor ID for player chest", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
+		VarArmorRightShoulder = AddVariableString("Armor.RightShoulder", "armor_right_shoulder", "Armor ID for player right shoulder", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
+		VarArmorLeftShoulder = AddVariableString("Armor.LeftShoulder", "armor_left_shoulder", "Armor ID for player left shoulder", eCommandFlagsArchived, "", VariablePlayerArmorUpdate);
+		AddCommand("Armor.Update", "armor_update", "Update the player's armor.", eCommandFlagsHidden, VariablePlayerArmorUpdate);
 		AddCommand("Armor.SetUiModelPosition", "armor_ui_player_model_position", "Set the position of the ui player model", (CommandFlags)(eCommandFlagsOmitValueInList | eCommandFlagsHidden), CommandSetUiPlayerModelPosition);
 		AddCommand("Armor.SetUiModelRotation", "armor_ui_player_model_rotation", "Set the rotation of the ui player model", (CommandFlags)(eCommandFlagsOmitValueInList | eCommandFlagsHidden), CommandSetUiPlayerModelRotation);
 
-		VarColorsPrimary = AddVariableString("Colors.Primary", "colors_primary", "The primary colors hex value", eCommandFlagsArchived, "#000000", VariablePlayerArmorUpdate);
-		VarColorsSecondary = AddVariableString("Colors.Secondary", "colors_secondary", "The secondary colors hex value", eCommandFlagsArchived, "#000000", VariablePlayerArmorUpdate);
-		VarColorsVisor = AddVariableString("Colors.Visor", "colors_visor", "The visor colors hex value", eCommandFlagsArchived, "#000000", VariablePlayerArmorUpdate);
-		VarColorsLights = AddVariableString("Colors.Lights", "colors_lights", "The lights colors hex value", eCommandFlagsArchived, "#000000", VariablePlayerArmorUpdate);
-		VarColorsHolo = AddVariableString("Colors.Holo", "colors_holo", "The holo colors hex value", eCommandFlagsArchived, "#000000", VariablePlayerArmorUpdate);
+		AddCommand("AlertCarry", "alert_carry", "Toggle the alert carry pose", (CommandFlags)(eCommandFlagsOmitValueInList | eCommandFlagsHidden), CommandSetCarryType);
 
-		VarRepresentation = AddVariableString("Representation", "player_race", "The representation to display for the player's render mannequin", eCommandFlagsArchived, "spartan", VariablePlayerRepresentationUpdate);
+		VarColorsPrimary = AddVariableString("Colors.Primary", "colors_primary", "The primary colors hex value", eCommandFlagsArchived, "#171F0E", VariablePlayerArmorUpdate);
+		VarColorsSecondary = AddVariableString("Colors.Secondary", "colors_secondary", "The secondary colors hex value", eCommandFlagsArchived, "#171F0E", VariablePlayerArmorUpdate);
+		VarColorsVisor = AddVariableString("Colors.Visor", "colors_visor", "The visor colors hex value", eCommandFlagsArchived, "#FF7F00", VariablePlayerArmorUpdate);
+		VarColorsLights = AddVariableString("Colors.Lights", "colors_lights", "The lights colors hex value", eCommandFlagsArchived, "#9685FF", VariablePlayerArmorUpdate);
 
-		VarRenderWeapon = AddVariableString("RenderWeapon", "render_weapon", "The weapon to display on the player's render mannequin", eCommandFlagsArchived, "assault_rifle", VariablePlayerArmorUpdate);
+		VarRepresentation = AddVariableString("Representation", "player_race", "(DEBUG BUILDS ONLY) The representation to display for the player's render mannequin", (CommandFlags)(eCommandFlagsArchived | eCommandFlagsHidden), "spartan", VariablePlayerRepresentationUpdate);
 
 		VarPlayerName = AddVariableString("Name", "name", "The players ingame name", eCommandFlagsArchived, "Jasper", VariablePlayerNameUpdate);
+		VarPlayerServiceTag = AddVariableString("ServiceTag", "service_tag", "The players service tag", eCommandFlagsArchived, "117", VariablePlayerServiceTagUpdate);
+		VarPlayerGender = AddVariableString("Gender", "gender", "The players gender", eCommandFlagsArchived, "male", VariablePlayerGenderUpdate);
+
 		// hack to add a small notice before Player.PrivKey in the cfg file
 		AddVariableString("PrivKeyNote", "priv_key_note", "", (CommandFlags)(eCommandFlagsArchived | eCommandFlagsHidden), "The PrivKey below is used to keep your stats safe. Treat it like a password and don't share it with anyone!");
 		VarPlayerPrivKey = AddVariableString("PrivKey", "player_privkey", "The players unique stats private key", (CommandFlags)(eCommandFlagsOmitValueInList | eCommandFlagsArchived), "");
@@ -112,8 +166,6 @@ namespace Modules
 		memset(this->UserName, 0, sizeof(wchar_t)* 17);
 
 		AddCommand("PrintUID", "uid", "Prints the players UID", eCommandFlagsNone, CommandPlayerPrintUID);
-
-		AddCommand("ListRenderWeapons", "list_render_weapons", "Lists available weapons to display on the player's render mannequin", eCommandFlagsNone, Patches::Armor::CommandPlayerListRenderWeapons);
 
 		// patch Game_GetPlayerName to get the name from our field
 		Pointer::Base(0x42AA1).Write<uint32_t>((uint32_t)&this->UserName);
@@ -139,5 +191,15 @@ namespace Modules
 		std::string randomName = defaultNames[rand() % _countof(defaultNames)];
 		std::string previousValue;
 		Modules::CommandMap::Instance().SetVariable(VarPlayerName, randomName, previousValue);
+		Modules::CommandMap::Instance().SetVariable(VarPlayerServiceTag, GenerateRandomServiceTag(), previousValue);
+	}
+
+	bool ModulePlayer::ValidServiceTag(const std::string &tag)
+	{
+		static const std::unordered_set<std::string> filter = {"ANUS", "ARSE", "CLIT", "COCK", "COON", "CUNT", "DAGO", "DAMN","DICK", "DIKE", "DYKE", "FUCK", "GOOK", "HEEB", "HELL", "HOMO", "JIZZ", "KIKE", "KUNT", "KYKE", "MICK", "MUFF", "PAKI", "PISS", "POON", "PUTO", "SHIT", "SHIZ", "SLUT", "SMEG", "SPIC", "TARD", "TITS", "TWAT", "WANK", "NIGA"};
+
+		return tag.length() > 2 && tag.length() < 5
+			&& all_of(tag.begin(), tag.end(), [](auto c) { return c >= '0' && c <= 'Z'; })
+			&& filter.find(tag) == filter.end();
 	}
 }

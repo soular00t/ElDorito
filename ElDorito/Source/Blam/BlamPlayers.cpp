@@ -1,5 +1,6 @@
 #include "BlamPlayers.hpp"
 #include "../ElDorito.hpp"
+#include <iomanip>
 
 namespace
 {
@@ -49,5 +50,14 @@ namespace Blam::Players
 	PLAYER_KILLED_PLAYER_STATS GetPVPStats(int playerIndex)
 	{
 		return Pointer(0x23F5A98 + (playerIndex * 0x40)).Read<PLAYER_KILLED_PLAYER_STATS>();
+	}
+
+	void FormatUid(char* out, int64_t Uid)
+	{
+		std::stringstream ss;
+		ss << std::setw(16) << std::setfill('0') << std::hex << Uid << std::dec << std::setw(0);
+
+		strncpy(out, ss.str().c_str(), 16);
+		out[16] = '\0';
 	}
 }

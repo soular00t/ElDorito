@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <ctime>
 #include <fstream>
+#include <iomanip>
 
 #include "PlayerPropertiesExtension.hpp"
 #include "../Patch.hpp"
@@ -36,7 +37,7 @@ namespace
 	int Network_GetMaxPlayersHook();
 	bool __fastcall Network_GetEndpointHook(char *thisPtr, void *unused);
 
-	bool __fastcall PeerRequestPlayerDesiredPropertiesUpdateHook(Blam::Network::Session *thisPtr, void *unused, uint32_t arg0, uint32_t arg4, void *properties, uint32_t argC);
+	bool __fastcall PeerRequestPlayerDesiredPropertiesUpdateHook(Blam::Network::Session *thisPtr, void *unused, uint32_t arg0, uint32_t arg4, Blam::Players::ClientPlayerProperties *properties, uint32_t argC);
 	void __fastcall ApplyPlayerPropertiesExtended(Blam::Network::SessionMembership *thisPtr, void *unused, int playerIndex, uint32_t arg4, uint32_t arg8, uint8_t *data, uint32_t arg10);
 	void __fastcall RegisterPlayerPropertiesPacketHook(void *thisPtr, void *unused, int packetId, const char *packetName, int arg8, int size1, int size2, void *serializeFunc, void *deserializeFunc, int arg1C, int arg20);
 	void SerializePlayerPropertiesHook(Blam::BitStream *stream, uint8_t *buffer, bool flag);
@@ -49,8 +50,11 @@ namespace
 	int __fastcall Network_session_parameters_clearHook(void* thisPtr, int unused);
 	int __fastcall Network_session_remove_peerHook(Blam::Network::SessionMembership *membership, void *unused, int peerIndex);
 	bool __fastcall Network_session_parameter_countdown_timer_request_change_hook(void* thisPtr, void* unused, int state, int value);
+	bool __fastcall c_network_session_parameter_map_variant__request_change_hook(void *thisptr, void *unused, Blam::MapVariant *mapVariant);
+	char __fastcall c_network_session__handle_session_boot_hook(void *thisPtr, void *unused, int a2, int a3);
 
 	std::vector<Patches::Network::PongCallback> pongCallbacks;
+	std::vector<Patches::Network::MapVariantRequestChangeCallback> mapVariantRequestChangeCallbacks;
 	void PongReceivedHook();
 
 	std::vector<Patches::Network::LifeCycleStateChangedCallback> lifeCycleStateChangedCallbacks;
@@ -188,6 +192,8 @@ namespace Patches::Network
 				writer.String(Modules::ModuleServer::Instance().VarServerDualWieldEnabled->ValueString.c_str());
 				writer.Key("assassinationEnabled");
 				writer.String(Modules::ModuleServer::Instance().VarServerAssassinationEnabled->ValueString.c_str());
+				writer.Key("votingEnabled");
+				writer.Bool(Modules::ModuleServer::Instance().VarServerVotingEnabled->ValueInt == 1 || Modules::ModuleServer::Instance().VarVetoSystemEnabled->ValueInt == 1);
 
 				auto session = Blam::Network::GetActiveSession();
 				if (session && session->IsEstablished()){
@@ -252,55 +258,59 @@ namespace Patches::Network
 					writer.Key("players");
 
 					writer.StartArray();
-					uint32_t playerScoresBase = 0x23F1724;
-					//uint32_t playerInfoBase = 0x2162DD0;
 					uint32_t playerInfoBase = 0x2162E08;
-					uint32_t menuPlayerInfoBase = 0x1863B58;
 					uint32_t playerStatusBase = 0x2161808;
-					for (int i = 0; i < 16; i++)
+
+
+					int peerIdx = session->MembershipInfo.FindFirstPeer();
+					while (peerIdx != -1)
 					{
-						uint16_t score = Pointer(playerScoresBase + (1080 * i)).Read<uint16_t>();
-						uint16_t kills = Pointer(playerScoresBase + (1080 * i) + 4).Read<uint16_t>();
-						uint16_t assists = Pointer(playerScoresBase + (1080 * i) + 6).Read<uint16_t>();
-						uint16_t deaths = Pointer(playerScoresBase + (1080 * i) + 8).Read<uint16_t>();
+						int playerIdx = session->MembershipInfo.GetPeerPlayer(peerIdx);
+						if (playerIdx != -1)
+						{
 
-						wchar_t* name = Pointer(playerInfoBase + (5696 * i));
-						std::string nameStr = Utils::String::ThinString(name);
+							auto playerStats = Blam::Players::GetStats(playerIdx);
+							auto* player = &session->MembershipInfo.PlayerSessions[playerIdx];
+							std::string name = Utils::String::ThinString(player->Properties.DisplayName);
+							uint16_t team = Pointer(playerInfoBase + (5696 * playerIdx) + 32).Read<uint16_t>();
 
-						wchar_t* menuName = Pointer(menuPlayerInfoBase + (0x1628 * i));
-						std::string menuNameStr = Utils::String::ThinString(menuName);
+							uint8_t alive = Pointer(playerStatusBase + (176 * playerIdx)).Read<uint8_t>();
 
-						uint32_t ipAddr = Pointer(playerInfoBase + (5696 * i) - 88).Read<uint32_t>();
-						uint16_t team = Pointer(playerInfoBase + (5696 * i) + 32).Read<uint16_t>();
-						uint16_t num7 = Pointer(playerInfoBase + (5696 * i) + 36).Read<uint16_t>();
+							writer.StartObject();
+							writer.Key("name");
+							writer.String(name.c_str());
+							writer.Key("team");
+							writer.Int(team);
+							char uid[17];
+							Blam::Players::FormatUid(uid, player->Properties.Uid);
+							writer.Key("uid");
+							writer.String(uid);
+							std::stringstream color;
+							color << "#" << std::setw(6) << std::setfill('0') << std::hex << player->Properties.Customization.Colors[Blam::Players::ColorIndices::Primary];
+							writer.Key("primaryColor");
+							writer.String(color.str().c_str());
+							writer.Key("isAlive");
+							writer.Bool(alive == 1);
+							writer.Key("score");
+							writer.Int(playerStats.Score);
+							writer.Key("kills");
+							writer.Int(playerStats.Kills);
+							writer.Key("assists");
+							writer.Int(playerStats.Assists);
+							writer.Key("deaths");
+							writer.Int(playerStats.Deaths);
+							writer.Key("betrayals");
+							writer.Int(playerStats.Betrayals);
+							writer.Key("timeSpentAlive");
+							writer.Int(playerStats.TimeSpentAlive);
+							writer.Key("suicides");
+							writer.Int(playerStats.Suicides);
+							writer.Key("bestStreak");
+							writer.Int(playerStats.BestStreak);
+							writer.EndObject();
 
-						uint8_t alive = Pointer(playerStatusBase + (176 * i)).Read<uint8_t>();
-
-						uint64_t uid = Pointer(playerInfoBase + (5696 * i) - 8).Read<uint64_t>();
-						std::string uidStr;
-						Utils::String::BytesToHexString(&uid, sizeof(uint64_t), uidStr);
-
-						if (menuNameStr.empty() && nameStr.empty() && ipAddr == 0)
-							continue;
-
-						writer.StartObject();
-						writer.Key("name");
-						writer.String(menuNameStr.c_str());
-						writer.Key("score");
-						writer.Int(score);
-						writer.Key("kills");
-						writer.Int(kills);
-						writer.Key("assists");
-						writer.Int(assists);
-						writer.Key("deaths");
-						writer.Int(deaths);
-						writer.Key("team");
-						writer.Int(team);
-						writer.Key("isAlive");
-						writer.Bool(alive == 1);
-						writer.Key("uid");
-						writer.String(uidStr.c_str());
-						writer.EndObject();
+						}
+						peerIdx = session->MembershipInfo.FindNextPeer(peerIdx);
 					}
 					writer.EndArray();
 				}
@@ -309,7 +319,8 @@ namespace Patches::Network
 					writer.Key("passworded");
 					writer.Bool(true);
 				}
-
+				writer.Key("isDedicated");
+				writer.Bool(ElDorito::Instance().IsDedicated());
 				writer.Key("gameVersion");
 				writer.String(gameVersion.c_str());
 				writer.Key("eldewritoVersion");
@@ -421,6 +432,10 @@ namespace Patches::Network
 
 		//Hook(0x4F16F, Network_session_remove_peerHook, HookFlags::IsCall).Apply(); //Client on connect calls own peer index of server
 		Hook(0x4FF3E, Network_session_remove_peerHook, HookFlags::IsCall).Apply(); //server
+
+		Hook(0x00039AE4, c_network_session_parameter_map_variant__request_change_hook, HookFlags::IsCall).Apply();
+
+		Hook(0x9DA1A, c_network_session__handle_session_boot_hook, HookFlags::IsCall).Apply();
 	}
 
 
@@ -459,6 +474,8 @@ namespace Patches::Network
 													// Fixes an exception that happens with null d3d
 		Patch(0x675E30, { 0xC3 }).Apply();
 
+		*(uint8_t*)0x0244F970 = 1; // g_IsDedicatedServer
+		*(uint8_t*)0x0244F971 = 1; // g_SoundDisabled
 
 	}
 
@@ -535,6 +552,11 @@ namespace Patches::Network
 	void OnLifeCycleStateChanged(LifeCycleStateChangedCallback callback)
 	{
 		lifeCycleStateChangedCallbacks.push_back(callback);
+	}
+
+	void OnMapVariantRequestChange(MapVariantRequestChangeCallback callback)
+	{
+		mapVariantRequestChangeCallbacks.push_back(callback);
 	}
 }
 
@@ -681,7 +703,14 @@ namespace
 		RegisterPacketPtr RegisterPacket = reinterpret_cast<RegisterPacketPtr>(0x4801B0);
 		RegisterPacket(thisPtr, packetId, packetName, arg8, newSize, newSize, serializeFunc, deserializeFunc, arg1C, arg20);
 	}
-
+	bool IsNameNotAllowed(std::string name)
+	{
+		for (std::string s : Modules::ModuleServer::Instance().NonAllowedNames) {
+			if (name.find(s) != std::string::npos)
+				return true;
+		}
+		return false;
+	}
 	void SanitizePlayerName(wchar_t *name)
 	{
 		int i, dest = 0;
@@ -710,6 +739,14 @@ namespace
 		memset(&name[dest], 0, (16 - dest) * sizeof(wchar_t));
 		if (dest == 0)
 			wcscpy_s(name, 16, L"Forgot");
+		else {
+			std::string lowercasename = Utils::String::ThinString(name);
+			std::transform(lowercasename.begin(), lowercasename.end(), lowercasename.begin(), ::tolower);
+			if (IsNameNotAllowed(lowercasename))
+				wcscpy_s(name, 16, L"Filtered");
+		}
+			
+		
 	}
 
 	// Applies player properties data including extended properties
@@ -731,7 +768,7 @@ namespace
 			Server::Voting::PlayerJoinedVoteInProgress(playerIndex);
 			isNewMember = true;
 		}
-		
+
 		auto packetProperties = reinterpret_cast<Blam::Players::ClientPlayerProperties*>(data);
 		if (session->HasTeams() && session->MembershipInfo.PlayerSessions[playerIndex].Properties.TeamIndex != packetProperties->TeamIndex)
 		{
@@ -859,7 +896,7 @@ namespace
 
 	// This completely replaces c_network_session::peer_request_player_desired_properties_update
 	// Editing the existing function doesn't allow for a lot of flexibility
-	bool __fastcall PeerRequestPlayerDesiredPropertiesUpdateHook(Blam::Network::Session *thisPtr, void *unused, uint32_t arg0, uint32_t arg4, void *properties, uint32_t argC)
+	bool __fastcall PeerRequestPlayerDesiredPropertiesUpdateHook(Blam::Network::Session *thisPtr, void *unused, uint32_t arg0, uint32_t arg4, Blam::Players::ClientPlayerProperties *properties, uint32_t argC)
 	{
 		if (thisPtr->Type == 3)
 			return false;
@@ -869,6 +906,8 @@ namespace
 		auto playerIndex = thisPtr->MembershipInfo.GetPeerPlayer(membership->LocalPeerIndex);
 		if (playerIndex == -1)
 			return false;
+
+		wcscpy_s(properties->DisplayName, 16, Modules::ModulePlayer::Instance().UserName);
 
 		// Copy the player properties to a new array and add the extension data
 		auto packetSize = GetPlayerPropertiesPacketSize();
@@ -1040,7 +1079,7 @@ namespace
 
 		while (true)
 		{
-			Pointer(0x1860454).Write<uint32_t>(port);
+			Pointer(0x1860454).WriteFast<uint32_t>(port);
 			success = Network_link_create_endpoint(0, (short)port, 1, socket);
 
 			if (success)
@@ -1054,7 +1093,7 @@ namespace
 
 			if (++port - Modules::ModuleServer::Instance().VarServerGamePort->ValueInt >= 1000)
 			{
-				Pointer(0x1860454).Write<uint32_t>(Modules::ModuleServer::Instance().VarServerGamePort->ValueInt);
+				Pointer(0x1860454).WriteFast<uint32_t>(Modules::ModuleServer::Instance().VarServerGamePort->ValueInt);
 				return success;
 			}
 		}
@@ -1120,7 +1159,7 @@ namespace
 
 	void __cdecl SendSimulationDamageAftermathEventHook(int a1, int a2, int a3, int playerIndex, size_t size, void *data)
 	{
-		Pointer(data)(0xA).Write<uint8_t>(1); // flag the direction vector to be serialized
+		Pointer(data)(0xA).WriteFast<uint8_t>(1); // flag the direction vector to be serialized
 
 		auto SendSimulationDamageAftermathEvent = (void(__cdecl*)(int a1, int a2, int a3, int playerIndex, size_t size, void *data))(0x4E5A30);
 		SendSimulationDamageAftermathEvent(a1, a2, a3, playerIndex, size, data);
@@ -1161,5 +1200,25 @@ namespace
 
 		static auto Network_session_parameter_countdown_timer_request_change = (bool(__thiscall*)(void *thisPtr, int state, int newValue))(0x00453740);
 		return Network_session_parameter_countdown_timer_request_change(thisPtr, state, value);
+	}
+
+	bool __fastcall c_network_session_parameter_map_variant__request_change_hook(void *thisptr, void *unused, Blam::MapVariant *mapVariant)
+	{
+		const auto c_network_session_parameter_map_variant__request_change = (bool(__thiscall *)(void *thisptr, Blam::MapVariant *mapVariant))(0x00456480);
+		
+		auto ret = c_network_session_parameter_map_variant__request_change(thisptr, mapVariant);
+		if (ret)
+		{
+			for (auto &&callback : mapVariantRequestChangeCallbacks)
+				callback(mapVariant);
+		}
+		return ret;
+	}
+
+	char __fastcall c_network_session__handle_session_boot_hook(void *thisPtr, void *unused, int a2, int a3)
+	{
+		Blam::Network::LeaveGame();
+		Web::Ui::ScreenLayer::ShowAlert("Booted", "You were booted from the game", Web::Ui::ScreenLayer::AlertIcon::None);
+		return 0;
 	}
 }

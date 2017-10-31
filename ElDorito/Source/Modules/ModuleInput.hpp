@@ -19,9 +19,12 @@ namespace Modules
 		Command* VarInputControllerPort;
 		Command* VarControllerSensitivityX;
 		Command* VarControllerSensitivityY;
+		Command* VarControllerVibrationIntensity;
 		Command* VarControllerInvertY;
+		Command* VarControllerStickLayout;
 		Command* VarSpectateSensitivity;
 		Command* VarToggleSprint;
+		Command* VarTapScoreboard;
 
 		Command* CommandBindControllerAction;
 		Command* CommandBindKeyboardAction;
@@ -31,5 +34,6 @@ namespace Modules
 		static Blam::Input::BindingsTable *GetBindings();
 		static void UpdateBindings();
 		std::string ExportBindings() const;
+		bool IsCommandBound(std::string command);
 	};
 }

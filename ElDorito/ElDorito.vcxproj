@@ -13,6 +13,7 @@
   <ItemGroup>
     <ClCompile Include="Source\Blam\BitStream.cpp" />
     <ClCompile Include="Source\Blam\BlamData.cpp" />
+    <ClCompile Include="Source\Blam\BlamGraphics.cpp" />
     <ClCompile Include="Source\Blam\BlamInput.cpp" />
     <ClCompile Include="Source\Blam\BlamNetwork.cpp" />
     <ClCompile Include="Source\Blam\BlamObjects.cpp" />
@@ -51,7 +52,11 @@
     <ClCompile Include="Source\ChatCommands\ChatCommandMap.cpp" />
     <ClCompile Include="Source\CommandMap.cpp" />
     <ClCompile Include="Source\Console.cpp" />
-    <ClCompile Include="Source\DirectXHook.cpp" />
+    <ClCompile Include="Source\Forge\ForgeVolumes.cpp" />
+    <ClCompile Include="Source\Forge\PrematchCamera.cpp" />
+    <ClCompile Include="Source\Patches\BottomlessClip.cpp" />
+    <ClCompile Include="Source\Patches\Camera.cpp" />
+    <ClCompile Include="Source\Patches\DirectXHook.cpp" />
     <ClCompile Include="Source\ElDorito.cpp" />
     <ClCompile Include="Source\ElModules.cpp" />
     <ClCompile Include="Source\ElPatches.cpp" />
@@ -78,7 +83,7 @@
     <ClCompile Include="Source\Modules\ModuleVoIP.cpp" />
     <ClCompile Include="Source\Modules\ModuleWeapon.cpp" />
     <ClCompile Include="Source\Patch.cpp" />
-    <ClCompile Include="Source\Patches\Armor.cpp" />
+    <ClCompile Include="Source\Game\Armor.cpp" />
     <ClCompile Include="Source\Patches\Assassination.cpp" />
     <ClCompile Include="Source\Patches\Audio.cpp" />
     <ClCompile Include="Source\Patches\ContentItems.cpp" />
@@ -91,6 +96,8 @@
     <ClCompile Include="Source\Patches\Input.cpp" />
     <ClCompile Include="Source\Patches\LoadingScreen.cpp" />
     <ClCompile Include="Source\Patches\Logging.cpp" />
+    <ClCompile Include="Source\Patches\Maps.cpp" />
+    <ClCompile Include="Source\Patches\Medals.cpp" />
     <ClCompile Include="Source\Patches\Memory.cpp" />
     <ClCompile Include="Source\Patches\Mouse.cpp" />
     <ClCompile Include="Source\Patches\Network.cpp" />
@@ -99,6 +106,7 @@
     <ClCompile Include="Source\Patches\PlayerUid.cpp" />
     <ClCompile Include="Source\Patches\RawInput.cpp" />
     <ClCompile Include="Source\Patches\Scoreboard.cpp" />
+    <ClCompile Include="Source\Patches\Simulation.cpp" />
     <ClCompile Include="Source\Patches\Spectate.cpp" />
     <ClCompile Include="Source\Patches\Sprint.cpp" />
     <ClCompile Include="Source\Patches\Tweaks.cpp" />
@@ -108,6 +116,7 @@
     <ClCompile Include="Source\Pointer.cpp" />
     <ClCompile Include="Source\Server\BanList.cpp" />
     <ClCompile Include="Source\Server\DedicatedServer.cpp" />
+    <ClCompile Include="Source\Server\Stats.cpp" />
     <ClCompile Include="Source\Server\Rcon.cpp" />
     <ClCompile Include="Source\Server\ServerChat.cpp" />
     <ClCompile Include="Source\Server\Signaling.cpp" />
@@ -131,8 +140,10 @@
     <ClCompile Include="Source\Web\Ui\VotingScreen.cpp" />
     <ClCompile Include="Source\Web\Ui\WebChat.cpp" />
     <ClCompile Include="Source\Web\Ui\WebConsole.cpp" />
+    <ClCompile Include="Source\Web\Ui\WebForge.cpp" />
     <ClCompile Include="Source\Web\Ui\WebLoadingScreen.cpp" />
     <ClCompile Include="Source\Web\Ui\WebScoreboard.cpp" />
+    <ClCompile Include="Source\Web\Ui\WebSettings.cpp" />
     <ClCompile Include="Source\Web\Ui\WebTimer.cpp" />
     <ClCompile Include="Source\Web\Ui\WebVirtualKeyboard.cpp" />
     <ClCompile Include="Source\Web\WebRenderer.cpp" />
@@ -145,6 +156,7 @@
     <ClInclude Include="Source\Blam\BitStream.hpp" />
     <ClInclude Include="Source\Blam\BlamData.hpp" />
     <ClInclude Include="Source\Blam\BlamEvents.hpp" />
+    <ClInclude Include="Source\Blam\BlamGraphics.hpp" />
     <ClInclude Include="Source\Blam\BlamInput.hpp" />
     <ClInclude Include="Source\Blam\BlamMemory.hpp" />
     <ClInclude Include="Source\Blam\BlamNetwork.hpp" />
@@ -177,6 +189,7 @@
     <ClInclude Include="Source\Blam\Math\RealVector3D.hpp" />
     <ClInclude Include="Source\Blam\Math\Rectangle2D.hpp" />
     <ClInclude Include="Source\Blam\Padding.hpp" />
+    <ClInclude Include="Source\Blam\Tags\Camera\AreaScreenEffect.hpp" />
     <ClInclude Include="Source\Blam\Tags\Camera\CameraFxSettings.hpp" />
     <ClInclude Include="Source\Blam\Tags\Game\AssaultVariant.hpp" />
     <ClInclude Include="Source\Blam\Tags\Game\CTFVariant.hpp" />
@@ -193,13 +206,17 @@
     <ClInclude Include="Source\Blam\Tags\Game\TerritoriesVariant.hpp" />
     <ClInclude Include="Source\Blam\Tags\Game\TraitsProfile.hpp" />
     <ClInclude Include="Source\Blam\Tags\Game\VIPVariant.hpp" />
+    <ClInclude Include="Source\Blam\Tags\Globals\CacheFileGlobalTags.hpp" />
+    <ClInclude Include="Source\Blam\Tags\Items\Equipment.hpp" />
     <ClInclude Include="Source\Blam\Tags\Items\Item.hpp" />
     <ClInclude Include="Source\Blam\Tags\Items\Weapon.hpp" />
+    <ClInclude Include="Source\Blam\Tags\Objects\Biped.hpp" />
     <ClInclude Include="Source\Blam\Tags\Objects\Damage.hpp" />
     <ClInclude Include="Source\Blam\Tags\Objects\Medal.hpp" />
     <ClInclude Include="Source\Blam\Tags\Objects\Model.hpp" />
     <ClInclude Include="Source\Blam\Tags\Objects\Object.hpp" />
     <ClInclude Include="Source\Blam\Tags\Objects\Projectile.hpp" />
+    <ClInclude Include="Source\Blam\Tags\Objects\Unit.hpp" />
     <ClInclude Include="Source\Blam\Tags\Scenario\Scenario.hpp" />
     <ClInclude Include="Source\Blam\Tags\Sounds\Noise.hpp" />
     <ClInclude Include="Source\Blam\Tags\Sounds\SoundClasses.hpp" />
@@ -212,13 +229,19 @@
     <ClInclude Include="Source\Blam\Tags\Tags.hpp" />
     <ClInclude Include="Source\Blam\Tags\UI\ChudDefinition.hpp" />
     <ClInclude Include="Source\Blam\Tags\UI\ChudGlobalsDefinition.hpp" />
+    <ClInclude Include="Source\Blam\Tags\UI\GfxTexturesList.hpp" />
+    <ClInclude Include="Source\Blam\Tags\UI\GuiSkinWidgetDefinition.hpp" />
     <ClInclude Include="Source\Blam\Tags\UI\MultilingualUnicodeStringList.hpp" />
     <ClInclude Include="Source\Blam\Text\StringID.hpp" />
     <ClInclude Include="Source\ChatCommands\ChatCommand.hpp" />
     <ClInclude Include="Source\ChatCommands\ChatCommandMap.hpp" />
     <ClInclude Include="Source\CommandMap.hpp" />
     <ClInclude Include="Source\Console.hpp" />
-    <ClInclude Include="Source\DirectXHook.hpp" />
+    <ClInclude Include="Source\Forge\ForgeVolumes.hpp" />
+    <ClInclude Include="Source\Forge\PrematchCamera.hpp" />
+    <ClInclude Include="Source\Patches\BottomlessClip.hpp" />
+    <ClInclude Include="Source\Patches\Camera.hpp" />
+    <ClInclude Include="Source\Patches\DirectXHook.hpp" />
     <ClInclude Include="Source\ElDorito.hpp" />
     <ClInclude Include="Source\ElModules.hpp" />
     <ClInclude Include="Source\ElPatches.hpp" />
@@ -246,7 +269,7 @@
     <ClInclude Include="Source\Modules\ModuleVoIP.hpp" />
     <ClInclude Include="Source\Modules\ModuleWeapon.hpp" />
     <ClInclude Include="Source\Patch.hpp" />
-    <ClInclude Include="Source\Patches\Armor.hpp" />
+    <ClInclude Include="Source\Game\Armor.hpp" />
     <ClInclude Include="Source\Patches\Assassination.hpp" />
     <ClInclude Include="Source\Patches\Audio.hpp" />
     <ClInclude Include="Source\Patches\ContentItems.hpp" />
@@ -259,6 +282,8 @@
     <ClInclude Include="Source\Patches\Input.hpp" />
     <ClInclude Include="Source\Patches\LoadingScreen.hpp" />
     <ClInclude Include="Source\Patches\Logging.hpp" />
+    <ClInclude Include="Source\Patches\Maps.hpp" />
+    <ClInclude Include="Source\Patches\Medals.hpp" />
     <ClInclude Include="Source\Patches\Memory.hpp" />
     <ClInclude Include="Source\Patches\Mouse.hpp" />
     <ClInclude Include="Source\Patches\Network.hpp" />
@@ -267,6 +292,7 @@
     <ClInclude Include="Source\Patches\PlayerUid.hpp" />
     <ClInclude Include="Source\Patches\RawInput.hpp" />
     <ClInclude Include="Source\Patches\Scoreboard.hpp" />
+    <ClInclude Include="Source\Patches\Simulation.hpp" />
     <ClInclude Include="Source\Patches\Spectate.hpp" />
     <ClInclude Include="Source\Patches\Sprint.hpp" />
     <ClInclude Include="Source\Patches\Tweaks.hpp" />
@@ -277,6 +303,7 @@
     <ClInclude Include="Source\resource.h" />
     <ClInclude Include="Source\Server\BanList.hpp" />
     <ClInclude Include="Source\Server\DedicatedServer.hpp" />
+    <ClInclude Include="Source\Server\Stats.hpp" />
     <ClInclude Include="Source\Server\Rcon.hpp" />
     <ClInclude Include="Source\Server\ServerChat.hpp" />
     <ClInclude Include="Source\Server\Signaling.hpp" />
@@ -339,8 +366,10 @@
     <ClInclude Include="Source\Web\Ui\VotingScreen.hpp" />
     <ClInclude Include="Source\Web\Ui\WebChat.hpp" />
     <ClInclude Include="Source\Web\Ui\WebConsole.hpp" />
+    <ClInclude Include="Source\Web\Ui\WebForge.hpp" />
     <ClInclude Include="Source\Web\Ui\WebLoadingScreen.hpp" />
     <ClInclude Include="Source\Web\Ui\WebScoreboard.hpp" />
+    <ClInclude Include="Source\Web\Ui\WebSettings.hpp" />
     <ClInclude Include="Source\Web\Ui\WebTimer.hpp" />
     <ClInclude Include="Source\Web\Ui\WebVirtualKeyboard.hpp" />
     <ClInclude Include="Source\Web\WebRenderer.hpp" />
@@ -430,7 +459,7 @@
     </Midl>
     <Link>
       <AdditionalOptions>%(AdditionalOptions)  /machine:X86</AdditionalOptions>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;d3d9.lib;d3dx9.lib;Version.lib;ws2_32.lib;detours.lib;libeay32MT.lib;psapi.lib;winmm.lib;libcef.lib;libcef_dll_wrapperd.lib;cppnetlib-uri-d.lib;iphlpapi.lib;miniupnpc.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;d3d9.lib;d3dx9.lib;Version.lib;ws2_32.lib;detours.lib;libeay32MT.lib;psapi.lib;winmm.lib;libcef.lib;libcef_dll_wrapperd.lib;cppnetlib-uri-d.lib;iphlpapi.lib;miniupnpc.lib;Xinput9_1_0.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libs/directx/lib.X86;$(SolutionDir)libs/directx/lib.X86/$(Configuration);$(SolutionDir)libs/detours/lib.X86;$(SolutionDir)libs/detours/lib.X86/$(Configuration);$(SolutionDir)libs/openssl-1.1.0e/lib;$(SolutionDir)libs/openssl-1.1.0e/lib/$(Configuration);$(SolutionDir)libs/cef/lib;$(SolutionDir)libs/cef/lib/$(Configuration);$(SolutionDir)libs/cppnetlib/lib;$(SolutionDir)libs/cppnetlib/lib/$(Configuration);$(SolutionDir)libs/boost-1.60/lib;$(SolutionDir)libs/boost-1.60/lib/$(Configuration);$(SolutionDir)libs/miniupnpc/lib;$(SolutionDir)libs/miniupnpc/lib/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -477,7 +506,7 @@
     </Midl>
     <Link>
       <AdditionalOptions>%(AdditionalOptions)  /machine:X86 /NODEFAULTLIB:libcmtd.lib</AdditionalOptions>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;d3d9.lib;d3dx9.lib;Version.lib;ws2_32.lib;detours.lib;libeay32MT.lib;psapi.lib;winmm.lib;libcef.lib;libcef_dll_wrapper.lib;cppnetlib-uri.lib;iphlpapi.lib;miniupnpc.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;d3d9.lib;d3dx9.lib;Version.lib;ws2_32.lib;detours.lib;libeay32MT.lib;psapi.lib;winmm.lib;libcef.lib;libcef_dll_wrapper.lib;cppnetlib-uri.lib;iphlpapi.lib;miniupnpc.lib;Xinput9_1_0.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libs/directx/lib.X86;$(SolutionDir)libs/directx/lib.X86/$(Configuration);$(SolutionDir)libs/detours/lib.X86;$(SolutionDir)libs/detours/lib.X86/$(Configuration);$(SolutionDir)libs/openssl-1.1.0e/lib;$(SolutionDir)libs/openssl-1.1.0e/lib/$(Configuration);$(SolutionDir)libs/cef/lib;$(SolutionDir)libs/cef/lib/$(Configuration);$(SolutionDir)libs/cppnetlib/lib;$(SolutionDir)libs/cppnetlib/lib/$(Configuration);$(SolutionDir)libs/boost-1.60/lib;$(SolutionDir)libs/boost-1.60/lib/$(Configuration);$(SolutionDir)libs/miniupnpc/lib;$(SolutionDir)libs/miniupnpc/lib/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>

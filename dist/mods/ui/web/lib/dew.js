@@ -239,6 +239,9 @@ CommandType = {
                     resolve(value);
                 },
                 onFailure: function (code, message) {
+                    if(method=="command"){
+                        method = method+": "+args.command;
+                    }
                     reject(new DewError(message, code, method));
                 }
             });
@@ -359,6 +362,18 @@ CommandType = {
             capture: !!capture
         });
     }
+	
+	/**
+     * Requests to change this screen's pointer capture state.
+     * This is overridden by dew.captureInput
+     *
+     * @param {boolean} capture - true to capture mouse and keyboard input, false to release.
+     */
+    dew.capturePointer = function (capture) {
+        postUiMessage("capturePointer", {
+            capture: !!capture
+        });
+    }
 
     /**
      * (ASYNCHRONOUS) Runs a console command.
@@ -391,10 +406,11 @@ CommandType = {
      * @param {string} address - The IPv4 address of the server to ping. Must not include a port number.
      * @returns {DewPromise} A promise that will be resolved once the ping is sent.
      */
-    dew.ping = function (address) {
+	 dew.ping = function (address, port=11774) {
         return dew.callMethod("ping", function () {
             return {
-                address: address.toString()
+                address: address.toString(),
+				port: port
             };
         });
     }

@@ -2,6 +2,7 @@
 
 #include "ModuleBase.hpp"
 #include <cstdint>
+#include <unordered_set>
 
 namespace Modules
 {
@@ -19,15 +20,18 @@ namespace Modules
 		Command* VarServerPort;
 		Command* VarServerGamePort;
 		Command* VarServerShouldAnnounce;
-		Command* VarServerMode;
-		Command* VarServerLobbyType;
 		Command* VarServerSprintEnabled;
 		Command* VarServerSprintEnabledClient;
+		Command* VarServerBottomlessClipEnabled;
+		Command* VarServerBottomlessClipEnabledClient;
 		Command* VarServerSprintUnlimited;
 		Command* VarServerSprintUnlimitedClient;
 		Command* VarServerDualWieldEnabled;
 		Command* VarServerDualWieldEnabledClient;
+		Command* VarServerDedicated;
+		Command* VarServerDedicatedClient;
 		Command* VarServerAssassinationEnabled;
+		Command* VarServerAssassinationEnabledClient;
 		Command* VarFloodFilterEnabled;
 		Command* VarFloodMessageScoreShort;
 		Command* VarFloodMessageScoreLong;
@@ -35,13 +39,11 @@ namespace Modules
 		Command* VarFloodTimeoutSeconds;
 		Command* VarFloodTimeoutResetSeconds;
 		Command* VarChatLogEnabled;
-		Command* VarChatLogPath;
+		Command* VarChatLogFile;
 		Command* VarServerMapVotingTime;
 		Command* VarServerVotingEnabled;
 		Command* VarServerNumberOfRevotesAllowed;
 		Command* VarServerNumberOfVotingOptions;
-		Command* VarServerAutoHost;
-		Command* VarStatsServer;
 		Command* VarRconPassword;
 		Command* VarServerTeamShuffleEnabled;
 		Command* VarServerTimeBetweenVoteEndAndGameStart;
@@ -66,6 +68,11 @@ namespace Modules
 		Command* VarVetoVoteTime;
 		Command* VarVetoWinningOptionShownTime;
 		Command* VarVetoVotePassPercentage;
+		Command* VarVotingJsonPath;
+		Command* VarVetoJsonPath;
+
+		std::unordered_set<std::string> NonAllowedNames = std::unordered_set<std::string>{};
+		void refreshNonAllowedNames();
 
 		uint8_t SyslinkData[0x176];
 

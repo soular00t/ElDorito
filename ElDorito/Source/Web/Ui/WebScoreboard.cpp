@@ -7,6 +7,7 @@
 #include "../../Patches/Scoreboard.hpp"
 #include "../../Patches/Input.hpp"
 #include "../../Pointer.hpp"
+#include "../../Modules/ModuleInput.hpp"
 #include "../../Modules/ModuleServer.hpp"
 #include "../../ThirdParty/rapidjson/writer.h"
 #include "../../ThirdParty/rapidjson/stringbuffer.h"
@@ -16,6 +17,7 @@
 #include <iomanip>
 #include "../../Blam/BlamObjects.hpp"
 #include "../../Blam/Tags/Items/Weapon.hpp"
+#include "../../Blam/BlamTime.hpp"
 
 using namespace Blam::Input;
 using namespace Blam::Events;
@@ -24,10 +26,12 @@ namespace
 {
 	bool locked = false;
 	bool postgame = false;
-	bool postgameScoreShown = false;
-	time_t postgameDisplayed;
-	const time_t postgameDisplayTime = 5;
-	const time_t postgameDelayTime = 4.7;
+	bool returningToLobby = false;
+	bool acceptsInput = true;
+	bool pressedLastTick = false;
+	int lastPressedTime = 0;
+	int postgameDisplayed;
+	const float postgameDelayTime = 2;
 
 	void OnEvent(Blam::DatumIndex player, const Event *event, const EventDefinition *definition);
 	void OnGameInputUpdated();
@@ -63,32 +67,99 @@ namespace Web::Ui::WebScoreboard
 		ScreenLayer::Hide("scoreboard");
 	}
 
-	//Used to skip the 40 second wait at the end of a round.
-	//It would probably be better to find the code that is causing the wait and fix it there.
-	//This also fixes the black screen of death that happens sometimes at the end of a round. \o/
 	void Tick()
 	{
+		const auto game_engine_round_in_progress = (bool(*)())(0x00550F90);
+		const auto is_main_menu = (bool(*)())(0x00531E90);
+		const auto is_multiplayer = (bool(*)())(0x00531C00);
+		static auto previousMapLoadingState = 0;
+		static auto previousEngineState = 0;
+		static bool previousHasUnit = false;
+
+		if (!is_multiplayer() && !is_main_menu())
+			return;
+
 		if (postgame)
 		{
-			time_t curTime;
-			time(&curTime);
-
-			if (!postgameScoreShown && ((curTime - postgameDisplayed) > postgameDelayTime))
+			if (Blam::Time::TicksToSeconds((Blam::Time::GetGameTicks() - postgameDisplayed)) > postgameDelayTime)
 			{
 				Web::Ui::WebScoreboard::Show(locked, postgame);
-				postgameScoreShown = true;
-			}
-
-			if ((curTime - postgameDisplayed) > (postgameDisplayTime + postgameDelayTime))
-			{
-				auto session = Blam::Network::GetActiveSession();
-
-				if (session)
-					session->Parameters.SetSessionMode(1);
-
+				acceptsInput = false;
 				postgame = false;
-				postgameScoreShown = false;
+				returningToLobby = true;
 			}
+		}
+		auto isMainMenu = is_main_menu();
+
+		auto currentMapLoadingState = *(bool*)0x023917F0;
+		if (previousMapLoadingState && !currentMapLoadingState)
+		{
+			if (isMainMenu)
+			{
+				returningToLobby = false;
+				acceptsInput = true;
+				Web::Ui::WebScoreboard::Hide();
+			}
+			else
+			{
+				locked = false;
+				postgame = false;
+				acceptsInput = false;
+				Web::Ui::WebScoreboard::Show(locked, postgame);
+			}
+		}
+		else if (!previousMapLoadingState && currentMapLoadingState && isMainMenu && !returningToLobby)
+		{
+			locked = false;
+			postgame = false;
+			Web::Ui::WebScoreboard::Hide();
+		}
+		previousMapLoadingState = currentMapLoadingState;
+
+		auto engineGlobals = ElDorito::GetMainTls(0x48)[0];
+		if (!engineGlobals)
+			return;
+
+		auto currentEngineState = engineGlobals(0xE110).Read<uint8_t>();	
+		if (previousEngineState & 8 && !(currentEngineState & 8)) // summary ui
+		{
+			locked = false;
+			postgame = false;
+			acceptsInput = true;
+			Web::Ui::WebScoreboard::Hide();
+		}
+		previousEngineState = currentEngineState;
+
+		if (game_engine_round_in_progress())
+		{
+			Blam::Players::PlayerDatum *player{ nullptr };
+			auto playerIndex = Blam::Players::GetLocalPlayer(0);
+			if (playerIndex == Blam::DatumIndex::Null || !(player = Blam::Players::GetPlayers().Get(playerIndex)))
+				return;
+
+			auto secondsUntilSpawn = Pointer(player)(0x2CBC).Read<int>();
+			auto firstTimeSpawning = Pointer(player)(0x4).Read<uint32_t>() & 8;
+
+			if (player->SlaveUnit != Blam::DatumIndex::Null)
+			{
+				if (!previousHasUnit)
+				{
+					acceptsInput = true;
+					Web::Ui::WebScoreboard::Hide();
+				}
+			}
+			else
+			{
+				if (!firstTimeSpawning && secondsUntilSpawn > 0 && secondsUntilSpawn < 2)
+				{
+					locked = false;
+					postgame = false;
+					acceptsInput = false;
+					Web::Ui::WebScoreboard::Show(locked, postgame);
+				}
+			}
+
+			previousHasUnit = player->SlaveUnit != Blam::DatumIndex::Null;
 		}
 	}
 
@@ -150,18 +221,24 @@ namespace Web::Ui::WebScoreboard
 			// Player information
 			writer.Key("name");
 			writer.String(Utils::String::ThinString(player.Properties.DisplayName).c_str());
+			writer.Key("serviceTag");
+			writer.String(Utils::String::ThinString(player.Properties.ServiceTag).c_str());
 			writer.Key("team");
 			writer.Int(player.Properties.TeamIndex);
 			std::stringstream color;
 			color << "#" << std::setw(6) << std::setfill('0') << std::hex << player.Properties.Customization.Colors[Blam::Players::ColorIndices::Primary];
 			writer.Key("color");
 			writer.String(color.str().c_str());
-			std::string uidStr;
-			Utils::String::BytesToHexString(&player.Properties.Uid, sizeof(uint64_t), uidStr);
+			char uid[17];
+			Blam::Players::FormatUid(uid, player.Properties.Uid);
 			writer.Key("UID");
-			writer.String(uidStr.c_str());
+			writer.String(uid);
 			writer.Key("isHost");
-			writer.Bool(playerIdx == session->MembershipInfo.HostPeerIndex);
+			if (Modules::ModuleServer::Instance().VarServerDedicatedClient->ValueInt == 1)
+				writer.Bool(false);
+			else {
+				writer.Bool(playerIdx == session->MembershipInfo.HostPeerIndex);
+			}
 			uint8_t alive = Pointer(playerStatusBase + (176 * playerIdx)).Read<uint8_t>();
 			writer.Key("isAlive");
 			writer.Bool(alive == 1);
@@ -252,10 +329,9 @@ namespace
 		//Update the scoreboard whenever an event occurs
 		Web::Ui::ScreenLayer::Notify("scoreboard", Web::Ui::WebScoreboard::getScoreboard(), true);
 
-		if (event->NameStringId == 0x4004D)// "general_event_game_over"
+		if (event->NameStringId == 0x4004D || event->NameStringId == 0x4005A) // "general_event_game_over" / "general_event_round_over"
 		{
-			time(&postgameDisplayed);
-			locked = true;
+			postgameDisplayed = Blam::Time::GetGameTicks();
 			postgame = true;
 		}
 	}
@@ -268,30 +344,36 @@ namespace
 
 	void OnGameInputUpdated()
 	{
-		BindingsTable bindings;
-		GetBindings(0, &bindings);
+		if (!acceptsInput)
+			return;
 
-		if (GetKeyTicks(bindings.PrimaryKeys[eGameActionUiSelect], eInputTypeUi) == 1 || GetActionState(eGameActionUiSelect)->Ticks == 1 || GetKeyTicks(bindings.SecondaryKeys[eGameActionUiSelect], eInputTypeUi) == 1)
+		auto uiSelect = GetActionState(eGameActionUiSelect);
+
+		if (!(uiSelect->Flags & eActionStateFlagsHandled) && uiSelect->Ticks == 1)
 		{
+			uiSelect->Flags |= eActionStateFlagsHandled;
+
 			if (strcmp((char*)Pointer(0x22AB018)(0x1A4), "mainmenu") != 0)
 			{
-				//If shift is held down then lock the scoreboard
-				if (GetKeyTicks(eKeyCodeShift, eInputTypeUi) == 0)
-					locked = false;
-				else
-					locked = true;
+				//If shift is held down or was pressed again within the repeat delay, lock the scoreboard
+				locked = GetKeyTicks(eKeyCodeShift, eInputTypeUi) || ((GetTickCount() - lastPressedTime) < 250
+					&& Modules::ModuleInput::Instance().VarTapScoreboard->ValueInt == 1);
+
 				Web::Ui::WebScoreboard::Show(locked, postgame);
+
+				lastPressedTime = GetTickCount();
+				pressedLastTick = true;	
+			}
+			else
+			{
+				Web::Ui::WebScoreboard::Show(true, false);
 			}
 		}
-
-		if (!locked && !postgame)
-		{
-			//Hide the scoreboard when you release tab. Only check when the scoreboard isn't locked.
-			if (GetKeyTicks(bindings.PrimaryKeys[eGameActionUiSelect], eInputTypeUi) == 0 && GetActionState(eGameActionUiSelect)->Ticks == 0 && GetKeyTicks(bindings.SecondaryKeys[eGameActionUiSelect], eInputTypeUi) == 0)
-			{
-				Web::Ui::WebScoreboard::Hide();
-				locked = false;
-			}
+		//Hide the scoreboard when you release tab. Only check when the scoreboard isn't locked.
+		else if(!locked && !postgame && pressedLastTick && uiSelect->Ticks == 0)
+		{		
+			Web::Ui::WebScoreboard::Hide();
+			pressedLastTick = false;		
 		}
 	}
 }

@@ -14,218 +14,141 @@ var stickTicks = { left: 0, right: 0, up: 0, down: 0 };
 var repGP;
 var lastHeldUpdated = 0;
 
-var h3ColorArray = ['#626262','#B0B0B0','#DEDEDE','#9B3332','#DB6766','#EE807F','#DB8B00','#F8AE58','#FECB9C','#CCAE2C','#F3BC2B','#FDD879','#57741A','#90A560','#D8EFA7','#31787E','#4ABBC1','#91EDEC','#325992','#5588DB','#97B5F5','#553E8F','#9175E3','#C4B4FD','#830147','#D23C83','#FC8BB9','#513714 ','#AC8A6E','#E0BEA2'];
 var settingsToLoad = [
-    ['sControlsMethod','Settings.Gamepad'],
-    ['sInfantryMouseSensV','Settings.MouseSensitivityVertical'],
-    ['sInfantryMouseSensH','Settings.MouseSensitivityHorizontal'],
-    ['sVehicleMouseSensV','Settings.MouseSensitivityVehicleVertical'],
-    ['sVehicleMouseSensH','Settings.MouseSensitivityVehicleHorizontal'],
-    ['sMouseAcceleration','Settings.MouseAcceleration'],
-    ['sMouseFilter','Settings.MouseFilter'],
-    ['sInvertMouse','Settings.InvertMouse'],
-    ['sToggleCrouch','Settings.ToggleCrouch'],
-    ['sScreenResolution','Settings.ScreenResolution'],
-    ['sBrightness','Settings.Brightness'],
-    ['sFullscreen','Settings.Fullscreen'],
-    ['sVsync','Settings.VSync'],
-    ['sAntiAliasing','Settings.Antialiasing'],
-    ['sTextureResolution','Settings.TextureResolution'],
-    ['sTextureFiltering','Settings.TextureFilteringQuality'],
-    ['sLightningQuality','Settings.LightingQuality'],
-    ['sEffectsQuality','Settings.EffectsQuality'],
-    ['sShadowQuality','Settings.ShadowQuality'],
-    ['sDetailsLevel','Settings.DetailsQuality'],
-    ['sPostprocessing','Settings.PostprocessingQuality'],
-    ['sMotionBlur','Settings.MotionBlur'],
-    ['sMasterVolume','Settings.MasterVolume'],
-    ['sSFXVolume','Settings.SfxVolume'],
-    ['sMusicVolume','Settings.MusicVolume'],
-    ['sHudShake','Settings.HUDShake'],
-    ['sPlayerMarkerColors','Settings.PlayerMarkerColors'],
-    ['sCameraFOV','Camera.FOV'],
-    ['sName', 'Server.Name'],
-	['sMatchCountdown', 'Server.CountdownLobby'], 
-    ['sCountdown', 'Server.Countdown'], 
-    ['sMaxPlayers', 'Server.MaxPlayers'], 
-    ['sMaxTeamSize', 'Server.MaxTeamSize'], 
-    ['sShouldAnnounce', 'Server.ShouldAnnounce'],
-    ['sDualWieldEnabled', 'Server.DualWieldEnabled'], 
-    ['sAssassinationEnabled', 'Server.AssassinationEnabled'], 
-    ['cCenteredCrosshair' , 'Camera.Crosshair'], 
-    ['cHideHUD', 'Camera.HideHUD'], 
-    ['inputRaw','Input.RawInput'], 
-    ['sPass', 'Server.Password'], 
-    ['sMessage', 'Server.Message'], 
-    ['lookSensitivity', 'Input.ControllerSensitivityX'], 
-    ['controllerPort','Input.ControllerPort'], 
-    ['gExpandScoreboard','Game.ExpandedScoreboard'], 
-    ['invertLook','Input.ControllerInvertY'], 
-    ['gHideChat','Game.HideChat'], 
-    ['gSuppressJuggling','Game.SuppressJuggling'], 
-    ['sTeamShufflingEnabled','Server.TeamShuffleEnabled'],
-    ['wOffsetConfig','Weapon.JSON.File'],
-    ['gMedalPack','Game.MedalPack'], 
-    ['iSpectateSens','Input.SpectateSensitivity'],
-    ['iDisableSprint','Input.ToggleSprint'],
-    ['gIconSet','Game.IconSet'],
-    ['sMapVotingTime','Server.MapVotingTime'],
-    ['sNumOfRevotes','Server.NumberOfRevotesAllowed'],
-    ['sNumberOfVotingOptions','Server.NumberOfVotingOptions'],
-    ['sVotingDuplicationLevel','Server.VotingDuplicationLevel'],
-    ['sTimeBetweenVoteEndAndGameStart','Server.TimeBetweenVoteEndAndGameStart'],
-    ['sNumOfVetoes','Server.NumberOfVetoVotes'],['sVetoVoteTime','Server.VetoVoteTime'],
-    ['sVetoWinningShowTime','Server.VetoWinningOptionShownTime'],
-    ['sVetoPassPercentage','Server.VetoVotePassPercentage'],
-    ['vEnabled','VoIP.Enabled'],
-    ['vMicrophoneID','VoIP.MicrophoneID'],
-    ['vPTTEnable','VoIP.PTT_Enabled'],
-    ['vAGC','VoIP.AGC'],
-    ['vNoiseSupress','VoIP.NoiseSupress'],
-    ['vEchoCancelation','VoIP.EchoCancelation'],
-    ['pName', 'Player.Name'], 
-    ['renderWeapon', 'Player.RenderWeapon'], 
-    ['armorHelmet', 'Player.Armor.Helmet'], 
-    ['armorChest', 'Player.Armor.Chest'],
-    ['armorShoulders', 'Player.Armor.Shoulders'], 
-    ['armorArms', 'Player.Armor.Arms'], 
-    ['armorLegs', 'Player.Armor.Legs'], 
-    ['armorAcc', 'Player.Armor.Accessory'], 
-    ['colorsPrimary', 'Player.Colors.Primary'], 
-    ['colorsSecondary', 'Player.Colors.Secondary'], 
-    ['colorsVisor', 'Player.Colors.Visor'],
-    ['colorsLights', 'Player.Colors.Lights'], 
-    ['colorsHolo', 'Player.Colors.Holo'],
-    ['sUPNP','UPnP.Enabled'], 
-    ['tAgressiveAudioDiscard', 'Tweaks.AggressiveAudioDiscarding'], 
-    ['tDisableFog', 'Tweaks.DisableReactorFog'], 
-    ['tDisableWeapOutline', 'Tweaks.DisableWeaponOutline'], 
-    ['tDisableHeadshotEffect', 'Tweaks.DisableHeadshotEffect'],
-    ['tDisableHitmarkers', 'Tweaks.DisableHitMarkers'], 
-    ['tGruntBirthdayParty', 'Tweaks.GruntBirthdayParty'],
-    ['tReachFrags','Tweaks.ReachStyleFrags'],
-    ['tIntelBloomPatch','Tweaks.IntelBloomPatch'],
-    ['sAudioDevice','Settings.AudioOutputDevice'],
-    ['sContrast','Settings.Contrast']
+    ['sControlsMethod','Settings.Gamepad', 'Control Method', 'Keyboard or Gamepad - Choose your preference.'],
+	['sInfantryMouseSensV','Settings.MouseSensitivityVertical', 'Infantry Mouse Sensitivity Vertical', 'Adjusts the infantry mouse sensitivity on the Y-axis.'],
+    ['sInfantryMouseSensH','Settings.MouseSensitivityHorizontal', 'Infantry Mouse Sensitivity Horizontal', 'Adjusts the infantry mouse sensitivity on the X-axis.'],
+    ['sVehicleMouseSensV','Settings.MouseSensitivityVehicleVertical', 'Vehicle Mouse Sensitivity Vertical', 'Adjusts the vehicle mouse sensitivity on the Y-axis.'],
+    ['sVehicleMouseSensH','Settings.MouseSensitivityVehicleHorizontal', 'Vehicle Mouse Sensitivity Horizontal', 'Adjusts the vehicle mouse sensitivity on the X-axis.'],
+    ['sMouseAcceleration','Settings.MouseAcceleration', 'Mouse Acceleration', 'Increases the speed multiplier of your mouse the faster you move it.'],
+    ['sMouseFilter','Settings.MouseFilter', 'Mouse Filter', 'Smoothes out mouse movement.'],
+    ['sInvertMouse','Settings.InvertMouse', 'Invert Mouse', 'Inverts the mouse look vertically.'],
+    ['sToggleCrouch','Settings.ToggleCrouch', 'Toggle Crouch', 'Toggles crouch on press instead of disabling on release.'],
+    ['sScreenResolution','Settings.ScreenResolution', 'Screen Resolution', 'Sets the rendering resolution. Higher resolutions require more graphics processing power and video memory.'],
+    ['sBrightness','Settings.Brightness', 'Brightness', 'Adjust the game\'s brightness.'],
+    ['sFullscreen','Settings.Fullscreen', 'Fullscreen', 'Toggles Fullscreen Mode.'],
+    ['sVsync','Settings.VSync', 'Vsync', 'Vsync elimates the screen tearing by synchronizing the game\'s frame rate with the display\'s refresh rate. Turning it ON will limit your maximum FPS.'],
+    ['sAntiAliasing','Settings.Antialiasing', 'Anti-Aliasing', 'Anti-Aliasing smoothes edges, transparent textures and particles, reducing jagged visuals on both low and high resolutions.'],
+    ['sTextureResolution','Settings.TextureResolution', 'Texture Resolution', 'Adjusts the resolution and fidelity of the in-game textures. Higher settings use up more VRAM.'],
+    ['sTextureFiltering','Settings.TextureFilteringQuality', 'Texture Filtering', ' Increases the sharpness of textures viewed at a distance or angle. If this setting is lower textures will appear muddy from far away.'],
+    ['sLightningQuality','Settings.LightingQuality', 'Lighting Quality', 'Enhances the realism of all lighting effects.'],
+    ['sEffectsQuality','Settings.EffectsQuality', 'Effects Quality', 'Controls the number of visual effects seen at any one time, and their level of detail.'],
+    ['sShadowQuality','Settings.ShadowQuality', 'Shadow Quality', 'Determines the resolution and filtering of shadows in the game.'],
+    ['sDetailsLevel','Settings.DetailsQuality', 'Details Level', 'Adjusts the distance objects will be rendered. The lower the detail level, the shorter distance objects will be rendered.'],
+    ['sPostprocessing','Settings.PostprocessingQuality', 'Postprocessing', 'Adjusts the quality of frames after they have been rendered.'],
+    ['sMotionBlur','Settings.MotionBlur', 'Motion Blur', 'Motion Blur is a general velocity-based blurring that is applied when either the camera or objects move rapidly on screen.'],
+    ['sMasterVolume','Settings.MasterVolume', 'Master Volume', 'Adjusts all volumes.'],
+    ['sSFXVolume','Settings.SfxVolume', 'SFX Volume', 'Adjusts the volume of sound effects.'],
+    ['sMusicVolume','Settings.MusicVolume', 'Music Volume', 'Adjusts the volume of music.'],
+    ['sHudShake','Settings.HUDShake', 'HUD Shake', 'Enables/Disables HUD shake.'],
+    ['sPlayerMarkerColors','Settings.PlayerMarkerColors', 'Player Marker Colors', 'Changes the colour scheme of over-head player markers.'],
+    ['sCameraFOV','Camera.FOV', 'Camera FOV', 'Adjusts the first person field of view.'],
+    ['cCenteredCrosshair' , 'Camera.Crosshair', 'Centered Crosshair', 'Centers the crosshair.'], 
+    ['cHideHUD', 'Camera.HideHUD', 'Hide HUD', 'Hides the HUD.'], 
+    ['inputRaw','Input.RawInput', 'Use Raw Input', 'Uses raw input, bypassing Windows mouse acceleration.'],  
+    ['lookSensitivity', 'Input.ControllerSensitivityY', 'Look Sensitivity', 'Adjusts the sensitivity of the look joystick.'], 
+    ['controllerPort','Input.ControllerPort', 'Controller Port Number', 'Specifies which controller port to receive input from.'], 
+    ['gExpandScoreboard','Game.ExpandedScoreboard', 'Always Expand Scoreboard', 'Always displays the expanded scoreboard.'], 
+    ['invertLook','Input.ControllerInvertY', 'Invert Look', 'Inverts the look joystick vertically.'], 
+    ['gHideChat','Game.HideChat', 'Hide Chat', 'Hides the in-game text chat.'], 
+    ['gSuppressJuggling','Game.SuppressJuggling', 'Suppress Juggling Announcer Spam', 'Supresses the audio spam from juggling.'], 
+    ['wOffsetConfig','Weapon.JSON.File', 'Viewmodel Config', 'Specifies which viewmodel config file to use.'],
+    ['gMedalPack','Game.MedalPack', 'Medal Pack', 'Specifies which Medals Pack to use.'], 
+    ['iSpectateSens','Input.SpectateSensitivity', 'Spectator Camera Senstivity', 'Adjusts the Camera Sensentivity for the Spectate Cam.'],
+    ['iDisableSprint','Input.ToggleSprint', 'Toggle Sprint', 'Toggles sprint on press instead of disabling on release.'],
+    ['gIconSet','Game.IconSet', 'Controller Button Icon Set', 'Sets the button icon set for the menus.'],
+    ['vEnabled','VoIP.Enabled', 'VoIP Enabled', 'Toggles Voice over IP.'],
+    ['vMicrophoneID','VoIP.MicrophoneID', 'Microphone ID', 'Specifies the Microphone ID.'],
+    ['vPTTEnable','VoIP.PTT_Enabled', 'Push To Talk', 'Transmits voice only while a bound key or button is held.'],
+    ['vAGC','VoIP.AGC', 'Automatic Gain Control', 'Controls signal amplitude at its output, despite variation of the amplitude in the input signal.'],
+    ['vNoiseSupress','VoIP.NoiseSupress', 'Noise Suppress', 'Removes background noise from the captured signal.'],
+    ['vEchoCancelation','VoIP.EchoCancelation', 'Echo Cancellation', 'Removes echo by subtracting it from the transmitted or received signal.'],
+    ['tAgressiveAudioDiscard', 'Tweaks.AggressiveAudioDiscarding', 'Aggressive Audio Discarding', 'Prioritizies gun sounds over others to make audio cutoff less noticeable.'], 
+    ['tDisableFog', 'Tweaks.DisableReactorFog', 'Reacthor', 'Removes some of the fog on Reactor which causes FPS drops indoors.'], 
+    ['tDisableWeapOutline', 'Tweaks.DisableWeaponOutline', 'Weapon Outline Removal', 'Removes outlines from weapons on the ground.'], 
+    ['tDisableHeadshotEffect', 'Tweaks.DisableHeadshotEffect', 'Disable headshot "ping" sound and effect', 'Removes the effect and ping sound you hear when killed by a headshot.'],
+    ['tDisableHitmarkers', 'Tweaks.DisableHitMarkers', 'Disable weapon hitmarkers', 'Stops red indicators when any of your weapons cause damage.'], 
+    ['tGruntBirthdayParty', 'Tweaks.GruntBirthdayParty', 'Grunt Birthday Party', 'Confetti flies from headshots as the children cheer.'],
+    ['tReachFrags','Tweaks.ReachStyleFrags', 'Reach Style Frags', 'Give tossed grenades a Halo: Reach styled orangey-yellow trail.'],
+    ['tIntelBloomPatch','Tweaks.IntelBloomPatch', 'Bloom Patch', 'Fixes extreme brightness on sunny maps.'],
+    ['sAudioDevice','Settings.AudioOutputDevice', 'Audio Device', 'Specifies which audio device the game should use.'],
+    ['sContrast','Settings.Contrast', 'Contrast', 'Adjusts the game\'s contrast.'],
+    ['controllerVibration', 'Input.ControllerVibrationIntensity', 'Controller Vibration', 'Adjusts the strength of controller vibration.'],
+    ['stickLayout', 'Input.ControllerStickLayout', 'Stick Layout', 'Adjusts the controller layout.'],
+    ['xSens', 'Input.ControllerSensitivityX', 'Controller Sensitivity - X Axis', 'Adjusts the controller sensitivity on the X-axis.'],
+    ['ySens', 'Input.ControllerSensitivityY', 'Controller Sensitivity - Y Axis', 'Adjusts the controller sensitivity on the Y-axis.'],
+    ['sQualityPreset', '', 'Quality Preset', 'Adjusts the overall graphics quality.'],
+    ['presetMenu', '', 'Button Layout', 'Changes the button layout.']
 ];
-var binds = ["Sprint", "Jump", "Crouch", "Use", "DualWield", "Fire", "FireLeft", "Reload", "ReloadLeft", "Zoom", "SwitchWeapons", "Melee", "Grenade", "SwitchGrenades", "VehicleAccelerate", "VehicleBrake", "VehicleBoost", "VehicleRaise", "VehicleDive", "VehicleFire", "VehicleAltFire", "BansheeBomb", "Menu", "Scoreboard", "ForgeDelete", "Chat", "TeamChat", "UseEquipment","VoiceChat","Forward","Back","Left","Right"];
+var binds = [
+    ['Sprint','Sprint','Infantry'],
+    ['Jump','Jump','Infantry'],
+    ['Crouch','Crouch','Infantry'],
+    ['Use','Use','Infantry'],
+    ['DualWield','Dual Wield','Infantry'],
+    ['Fire','Fire','Infantry'],
+    ['FireLeft','Fire Left','Infantry'],
+    ['Reload','Reload','Infantry'],
+    ['ReloadLeft','Reload Left','Infantry'],
+    ['Zoom','Zoom','Infantry'],
+    ['SwitchWeapons','Switch Weapons','Infantry'],
+    ['Melee','Melee','Infantry'],
+    ['Grenade','Grenade','Infantry'],
+    ['SwitchGrenades','Switch Grenades','Infantry'],
+    ['VehicleAccelerate','Vehicle Accelerate','Vehicle'],
+    ['VehicleBrake','Vehicle Brake','Vehicle'],
+    ['VehicleBoost','Vehicle Boost','Vehicle'],
+    ['VehicleRaise','Vehicle Raise','Vehicle'],
+    ['VehicleDive','Vehicle Dive','Vehicle'],
+    ['VehicleFire','Vehicle Fire','Vehicle'],
+    ['VehicleAltFire','Vehicle Alt Fire','Vehicle'],
+    ['BansheeBomb','Banshee Bomb','Vehicle'],
+    ['Menu','Menu','UI'],
+    ['Scoreboard','Scoreboard','UI'],
+    ['Chat','Chat','UI'],
+    ['TeamChat','Team Chat','UI'],
+    ['UseEquipment','Use Equipment','Infantry'],
+    ['VoiceChat','Voice Chat PTT','UI'],
+    ['Forward','Forward','Infantry'],
+    ['Back','Back','Infantry'],
+    ['Left','Left','Infantry'],
+    ['Right','Right','Infantry'],
+    ['NextPlayer','Spectate Next Player','UI'],
+    ['PrevPlayer','Spectate Prev Player','UI'],
+    ['UiLeftBumper','UiLeftBumper','UI'],
+    ['UiRightBumper','UiRightBumper','UI']
+];
+
 var buttons = ["","A","B","X","Y","RB","LB","LT","RT","Start","Back","LS","RS","Left","Right","Up","Down"];
-var renderWeapons = [
-	["Assault Rifle","assault_rifle"],
-	/*["Assault Rifle DMG","ar_variant_2"],
-	["Assault Rifle ROF","ar_variant_3"],
-	["Assault Rifle ACC","ar_variant_5"],
-	["Assault Rifle PWR","ar_variant_6"],*/
-	["Battle Rifle","battle_rifle"],
-	/*["Battle Rifle ROF","br_variant_1"],
-	["Battle Rifle ACC","br_variant_2"],
-	["Battle Rifle MAG","br_variant_3"],
-	["Battle Rifle DMG","br_variant_4"],
-	["Battle Rifle RNG","br_variant_5"],
-	["Battle Rifle PWR","br_variant_6"],
-	["Covenant Carbine","covenant_carbine"],
-	["Covenant Carbine MAG","covenant_carbine_variant_1"],
-	["Covenant Carbine DMG","covenant_carbine_variant_2"],
-	["Covenant Carbine ACC","covenant_carbine_variant_3"],
-	["Covenant Carbine ROF","covenant_carbine_variant_4"],
-	["Covenant Carbine RNG","covenant_carbine_variant_5"],
-	["Covenant Carbine PWR","covenant_carbine_variant_6"],*/
-	["DMR","dmr"],
-	/*["DMR MAG","dmr_variant_1"],
-	["DMR ACC","dmr_variant_2"],
-	["DMR ROF","dmr_variant_3"],
-	["DMR DMG","dmr_variant_4"],
-	["DMR RNG","dmr_variant_5"],
-	["DMR PWR","dmr_variant_6"],*/
-	["Plasma Rifle","plasma_rifle"],
-	/*["Plasma Rifle PWR","plasma_rifle_variant_6"],*/
-	["SMG","smg"],
-	/*["SMG ROF","smg_variant_1"],
-	["SMG ACC","smg_variant_2"],
-	["SMG DMG","smg_variant_4"],
-	["SMG PWR","smg_variant_6"]*/
-];
-var armorList = [
-	["Air Assault","air_assault"],
-	["Ballista","ballista"],
-	["Chameleon","chameleon"],
-	["Cyclops","cyclops"],
-	["Demo","demo"],
-	["Dutch","dutch"],
-	["Gladiator","gladiator"],
-	["Gungnir","gungnir"],
-	["Halberd","halberd"],
-	["Hammerhead","hammerhead"],
-	["Hoplite","hoplite"],
-	["Juggernaut","juggernaut"],
-	["Mac","mac"],
-	["Mercenary","mercenary"],
-	["Nihard","nihard"],
-	["Omni","omni"],
-	["Oracle","oracle"],
-	["Orbital","orbital"],
-	["Renegade","renegade"],
-	["Scanner","scanner"],
-	["Shark","shark"],
-	["Silverback","silverback"],
-	["Spectrum","spectrum"],
-	["Stealth","stealth"],
-	["Strider","strider"],
-	["Widow Maker","widow_maker"]
-];
-var accessoryList = [
-    ["None", ""],
-    ["Ammo Belt", "ammo_belt"],
-    ["Ammo Pack", "ammo_pack"],
-    ["Antenna 1", "antenna_01"],
-    ["Antenna 2", "antenna_02"],
-    ["Bullet Shield", "bullet_shield"],
-    ["Chest Battery", "chest_battery"],
-    ["Dog Tag", "dog_tag_01"],
-    ["Electronic Tool", "electronic_tool"],
-    ["Flashlight", "flashlight"],
-    ["Generator Device", "generator_device"],
-    ["Grenade", "grenade_01"],
-    ["Holo Scope", "holo_scope"],
-    ["HUD Screen", "hud_screen"],
-    ["Katana", "katana"],
-    ["Knife 1", "knife_01"],
-    ["Knife 2", "knife_02"],
-    ["Medkit", "medkit"],
-    ["Reactive Armor Arm", "reactive_armor_arm"],
-    ["Reactive Armor Leg", "reactive_armor_leg"],
-    ["Reactive Armor Plate", "reactive_armor_plate"],
-    ["Shotgun Ammo", "shotgun_ammo"],
-    ["Target Painter", "target_painter"],
-    ["Throwing Knives", "throwing_knives"],
-    ["Tool Bag", "tools_bag_1"]
-];
+
 var controllerPresets = [
-    ["Halo Online Default","LS,A,X,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,Right,,,LT,A,X,RT,LT,B,Start,Back,Y,,,LB,Down"],
-    ["Halo 3 Default","Right,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,LB,,,LT,A,LS,RT,LT,B,Start,Back,Y,,,X,Down"],
-    ["Halo 3 Southpaw","Right,A,LS,RB,LB,LT,RT,RB,LB,RS,Y,B,RT,LB,,,RT,A,LS,LT,RT,B,Start,Back,Y,,,X,Down"],
-    ["Halo 3 Boxer","Right,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,LT,B,LB,,,LT,A,LS,RT,LT,B,Start,Back,Y,,,X,Down"],
-    ["Halo 3 Green Thumb","Right,A,LS,RB,LB,RT,LT,RB,LB,B,Y,RS,LT,LB,,,LT,A,LS,RT,LT,B,Start,Back,Y,,,X,Down"],
-    ["Halo 3 Bumper Jumper","Right,LB,LS,B,A,RT,LT,B,A,RS,Y,RB,LT,A,,,LT,LB,LS,RT,LT,B,Start,Back,Y,,,X,Down"],
-    ["Halo 3 Walkie Talkie","Right,A,LS,B,X,RT,LT,B,X,RS,Y,RB,LT,A,,,LT,A,LS,RT,LT,B,Start,Back,Y,,LB,Up,Down"],
-    ["Halo Reach Default","LB,A,LS,X,LB,RT,LT,X,LB,RS,Y,RB,LT,B,,,LT,A,LS,RT,LT,B,Start,Back,Y,Down,Left,Right,Down"],
-    ["Halo Reach Southpaw","RB,A,LS,X,RB,LT,RT,X,RB,RS,Y,LB,RT,B,,,RT,A,LS,LT,RT,B,Start,Back,Y,Down,Left,Right,Down"],
-    ["Halo Reach Boxer","LB,A,LS,X,LB,RT,LT,X,LB,RS,Y,LT,RB,B,,,LT,A,LS,RT,LT,B,Start,Back,Y,Down,Left,Right,Down"],
-    ["Halo Reach Green Thumb","LB,A,LS,X,LB,RT,LT,X,LB,RB,Y,RS,LT,B,,,LT,A,LS,RT,LT,B,Start,Back,Y,Down,Left,Right,Down"],
-    ["Halo Reach Bumper Jumper","X,LB,LS,B,LB,RT,LT,B,LB,RS,Y,RB,LT,A,,,LT,LB,LS,RT,LT,RB,Start,Back,Y,Down,Left,Right,Down"],
-    ["Halo Reach Recon","LB,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,X,,,LT,A,LS,RT,LT,B,Start,Back,Y,Down,Left,Right,Down"],
-    ["Halo 4 Default","LS,A,B,X,LB,RT,LT,X,LB,RS,Y,RB,LT,Right,,,LT,A,B,RT,LT,RB,Start,Back,Y,,,LB,Down"],
-    ["Halo 4 Southpaw","LS,A,B,X,RB,LT,RT,X,RB,RS,Y,LB,RT,Right,,,RT,A,B,LT,RT,LB,Start,Back,Y,,,LB,Down"],
-    ["Halo 4 Boxer","B,A,LS,X,LB,RT,LT,X,LB,RS,Y,LT,RB,Right,,,LT,A,LS,RT,LT,B,Start,Back,Y,,,LB,Down"],
-    ["Halo 4 Green Thumb","LS,A,B,X,LB,RT,LT,X,LB,RB,Y,RS,LT,Right,,,LT,A,B,RT,LT,RB,Start,Back,Y,,,LB,Down"],
-    ["Halo 4 Bumper Jumper","A,LB,LS,B,X,RT,LT,B,X,RS,Y,RB,LT,Right,,,LT,LB,LS,RT,LT,RB,Start,Back,Y,,,X,Down"],
-    ["Halo 4 Recon","X,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,Right,,,LT,A,LS,RT,LT,B,Start,Back,Y,,,LB,Down"],
-    ["Halo 4 Fishstick","LS,A,B,X,LB,RT,LT,X,LB,LT,Y,RS,RB,Right,,,LT,A,B,RT,LT,RS,Start,Back,Y,,,LB,Down"]
+    ["Halo Online Default","LS,A,X,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,Right,,,LT,A,X,RT,LT,B,Start,Back,,,LB,Down"],
+    ["Halo 3 Default","Right,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,LB,,,LT,A,LS,RT,LT,B,Start,Back,,,X,Down"],
+    ["Halo 3 Southpaw","Right,A,LS,RB,LB,LT,RT,RB,LB,RS,Y,B,RT,LB,,,RT,A,LS,LT,RT,B,Start,Back,,,X,Down"],
+    ["Halo 3 Boxer","Right,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,LT,B,LB,,,LT,A,LS,RT,LT,B,Start,Back,,,X,Down"],
+    ["Halo 3 Green Thumb","Right,A,LS,RB,LB,RT,LT,RB,LB,B,Y,RS,LT,LB,,,LT,A,LS,RT,LT,B,Start,Back,,,X,Down"],
+    ["Halo 3 Bumper Jumper","Right,LB,LS,B,A,RT,LT,B,A,RS,Y,RB,LT,A,,,LT,LB,LS,RT,LT,B,Start,Back,,,X,Down"],
+    ["Halo 3 Walkie Talkie","Right,A,LS,B,X,RT,LT,B,X,RS,Y,RB,LT,A,,,LT,A,LS,RT,LT,B,Start,Back,,,Up,LB"],
+    ["Halo Reach Default","LB,A,LS,X,B,RT,LT,X,LB,RS,Y,RB,LT,B,,,LT,A,LS,RT,LT,B,Start,Back,,,Right,Down"],
+    ["Halo Reach Southpaw","RB,A,LS,X,B,LT,RT,X,RB,RS,Y,LB,RT,B,,,RT,A,LS,LT,RT,B,Start,Back,,,Right,Down"],
+    ["Halo Reach Boxer","LB,A,LS,X,B,RT,LT,X,LB,RS,Y,LT,RB,B,,,LT,A,LS,RT,LT,B,Start,Back,,,Right,Down"],
+    ["Halo Reach Green Thumb","LB,A,LS,X,B,RT,LT,X,LB,RB,Y,RS,LT,B,,,LT,A,LS,RT,LT,B,Start,Back,,,Right,Down"],
+    ["Halo Reach Bumper Jumper","X,LB,LS,B,A,RT,LT,B,A,RS,Y,RB,LT,A,,,LT,LB,LS,RT,LT,RB,Start,Back,,,Right,Down"],
+    ["Halo Reach Recon","LB,A,LS,RB,X,RT,LT,RB,LB,RS,Y,B,LT,X,,,LT,A,LS,RT,LT,B,Start,Back,,,Right,Down"],
+    ["Halo 4 Default","LS,A,B,X,LB,RT,LT,X,LB,RS,Y,RB,LT,Right,,,LT,A,B,RT,LT,RB,Start,Back,,,LB,Down"],
+    ["Halo 4 Southpaw","LS,A,B,X,RB,LT,RT,X,RB,RS,Y,LB,RT,Right,,,RT,A,B,LT,RT,LB,Start,Back,,,LB,Down"],
+    ["Halo 4 Boxer","B,A,LS,X,LB,RT,LT,X,LB,RS,Y,LT,RB,Right,,,LT,A,LS,RT,LT,B,Start,Back,,,LB,Down"],
+    ["Halo 4 Green Thumb","LS,A,B,X,LB,RT,LT,X,LB,RB,Y,RS,LT,Right,,,LT,A,B,RT,LT,RB,Start,Back,,,LB,Down"],
+    ["Halo 4 Bumper Jumper","A,LB,LS,B,X,RT,LT,B,X,RS,Y,RB,LT,Right,,,LT,LB,LS,RT,LT,RB,Start,Back,,,X,Down"],
+    ["Halo 4 Recon","X,A,LS,RB,LB,RT,LT,RB,LB,RS,Y,B,LT,Right,,,LT,A,LS,RT,LT,B,Start,Back,,,LB,Down"],
+    ["Halo 4 Fishstick","LS,A,B,X,LB,RT,LT,X,LB,LT,Y,RS,RB,Right,,,LT,A,B,RT,LT,RS,Start,Back,,,LB,Down"]
 ];
 var controllerIconPacks = [
     ['Xbox 360','360'],
     ['Xbox One','XboxOne']
 ];
+var bindChangeArray = [];
+var subPages = ['#page4','#page5','#page8','#page9','#page11'];
 
 $(document).ready(function(){
     $(document).keyup(function (e) {
@@ -234,22 +157,17 @@ $(document).ready(function(){
                 cancelButton();
             }
         }
+        if (e.keyCode == 44) {
+            dew.command('Game.TakeScreenshot');  
+        }
     });
     $(document).keydown(function(e){
         if(e.keyCode == 192 || e.keyCode == 223){
             dew.show('console');
         }
     });
-    initActive();
     setButtonLists();
     setOptionList('presetMenu', controllerPresets);
-	setOptionList('renderWeapon', renderWeapons);
-	setOptionList('armorHelmet', armorList);
-	setOptionList('armorChest', armorList);
-	setOptionList('armorShoulders', armorList);
-	setOptionList('armorArms', armorList);
-	setOptionList('armorLegs', armorList);
-    setOptionList('armorAcc', accessoryList);
     setOptionList('gIconSet', controllerIconPacks);
     dew.command('Game.ListMedalPacks', {}).then(function(response) {
         var packArray = [];
@@ -261,8 +179,17 @@ $(document).ready(function(){
         }
         setOptionList('gMedalPack', packArray);
     });
+    dew.command('Weapon.JSON.List', {}).then(function(response) {
+        var offsetArray = [];
+        var offsets = response.split(',');
+        for (i = 0; i < offsets.length; i++){
+            if(offsets[i].indexOf(" ") == -1){
+                offsetArray.push([offsets[i],offsets[i]]);
+            }
+        }
+        setOptionList('wOffsetConfig', offsetArray);
+    });
     $('.tabs li a').click(function(e){
-        adjustBiped();   
         $('.tabs li').removeClass('selected');
         $(this).parent().addClass('selected');
         window.location.href = e.target.href;
@@ -270,10 +197,11 @@ $(document).ready(function(){
         itemNumber = 0;
         $(e).ready(function(){
             if(hasGP){
-                updateSelection(0);
+                updateSelection(0, false, true);
             }
             tabIndex = $('.tabs li:visible a').index($("a[href='"+activePage+"']"));
         });
+        dew.command('Game.PlaySound 0x0B00');
     });
     $('.tinySetting').on('change', function(){
         var newID = $(this).attr('id');
@@ -304,35 +232,18 @@ $(document).ready(function(){
                 queueChange([result[1], newValue]);
             };
         });
+        dew.command('Game.PlaySound 0x0B00');
     });
     $('#lookSensitivity, #lookSensitivityText').on('change', function(e){
-        var xVal = 90 + (e.target.value * 20);
+        var yVal = 30 + (e.target.value * 10);
+        var xVal = yVal * 2;
         queueChange(['Input.ControllerSensitivityX', xVal]);
-        queueChange(['Input.ControllerSensitivityY', 90]);
+        queueChange(['Input.ControllerSensitivityY', yVal]);
     });
-    $('.instant').on('change', function(e){
-        if($(this).hasClass('color')){
-            if(!/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i.test(e.target.value)){
-                $(this).val('#FFFFFF');
-                return;
-            }
-        }
-        $.grep(settingsToLoad, function(result){
-            if(result[0] == e.target.id){
-                dew.command(result[1] + ' ' + e.target.value);
-            };
+    $('#controllerVibration, #controllerVibrationText').on('change', function(e){
+        dew.command('Input.ControllerVibrationIntensity ' + $(this).val(), {}).then(function(x){
+            dew.command('Input.ControllerVibrationTest');
         });
-    });
-    $('.color').colorPicker({
-        opacity: false,    
-        renderCallback: function($elm, toggled) {
-            var colors = this.color.colors;
-            $.grep(settingsToLoad, function(result){
-                if(result[0] == $elm[0].id){
-                    dew.command(result[1]+' #'+colors.HEX);
-                };
-            });
-        }
     });
     $('.wheelable').on('mousewheel', function(e) {
         if(e.originalEvent.wheelDelta > 0) {
@@ -400,7 +311,7 @@ $(document).ready(function(){
             if(itemNumber > $(activePage + ' label:visible').length-1){
                 itemNumber = $(activePage + ' label:visible').length-1;
             }
-            updateSelection(itemNumber);
+            updateSelection(itemNumber, true, true);
         }
     });
     $('#sSprint').on('change', function(){
@@ -408,12 +319,6 @@ $(document).ready(function(){
     });
     $('#presetMenu').on('change', function(){
         applyBindString(this.value);
-    });
-    $('#gIconSet').on('change', function(){
-        setButtons();
-    });
-    $('.voip').on('change', function(){
-        changeArray.push(['VoIP.Update', '']);
     });
     $('#wOffsetConfig').on('change', function(){
         changeArray.push(['Weapon.JSON.Load', '']);
@@ -429,14 +334,11 @@ $(document).ready(function(){
     });
     setControlValues();
     initializeBindings();
-    setButtons();
-    if(hasGP){
-        $('button img,.tabs img').show();
-    }
     $('.bind').on('change', function(){
-        updateBinding(this.id, this.value);
+        queueBindChange([this.id, this.value]);
         updateBindLabels();
-    });   
+    });
+    
     dew.command('Server.VotingEnabled', {}).then(function(x){
         dew.command('Server.VetoSystemEnabled', {}).then(function(y){
             if(x == '1' && y == '1'){
@@ -475,25 +377,24 @@ $(document).ready(function(){
     dew.on('controllerinput', function(e){    
         if(hasGP){    
             if(e.data.A == 1){
-                if($('#'+selectedItem).prev()[0].computedRole == 'button'){
+                if(activePage.endsWith('alertBox')){
+                    hideAlert(true);
+                }else if($('#'+selectedItem).prev()[0].computedRole == 'button'){
                     $('#'+selectedItem).prev().click();
-                }else{
+                }else{    
                     toggleSetting();
                 }
             }
             if(e.data.B == 1){
-                cancelButton();
-            }
-            if(e.data.X == 1){
-                if(activePage=='#page7'){
-                    randomArmor();
-                }else if(selectedItem=='presetMenu'){
-                    location.href='#page9';
+                if(activePage.endsWith('alertBox')){
+                    dismissButton();
+                }else{
+                    cancelButton();
                 }
             }
-            if(e.data.Y == 1){
-                if(activePage=='#page7'){
-                    randomColors();
+            if(e.data.X == 1){
+                if($('#'+selectedItem).prev()[0].computedRole == 'button'){
+                    $('#'+selectedItem).prev().click();
                 }
             }
             if(e.data.Up == 1){
@@ -516,34 +417,39 @@ $(document).ready(function(){
             }
             if(e.data.Start == 1){
                 applyButton();
+                hideAlert(true);
             }
             if(e.data.LeftTrigger != 0){
-                rotateBiped('left');
+                if(itemNumber > 0){
+                    itemNumber = 0;
+                    updateSelection(itemNumber, true, true);
+                }
             }
             if(e.data.RightTrigger != 0){
-                rotateBiped('right');
+                if(itemNumber < $(activePage + ' label:visible').length-1){
+                    itemNumber = $(activePage + ' label:visible').length-1;
+                    updateSelection(itemNumber, true, true);
+                }
             }
-            if(e.data.AxisLeftX != 0){
-                if(e.data.AxisLeftX > axisThreshold){
-                    stickTicks.right++;
-                };
-                if(e.data.AxisLeftX < -axisThreshold){
-                    stickTicks.left++;
-                };
+            if(e.data.AxisLeftX > axisThreshold){
+                stickTicks.right++;
             }else{
                 stickTicks.right = 0;
-                stickTicks.left = 0;
             }
-            if(e.data.AxisLeftY != 0){
-                if(e.data.AxisLeftY > axisThreshold){
-                    stickTicks.up++;
-                };
-                if(e.data.AxisLeftY < -axisThreshold){
-                    stickTicks.down++;
-                };
+            if(e.data.AxisLeftX < -axisThreshold){
+                stickTicks.left++;
+            }else{
+                stickTicks.left = 0; 
+            }
+            if(e.data.AxisLeftY > axisThreshold){
+                stickTicks.up++;
             }else{
                 stickTicks.up = 0;
-                stickTicks.down = 0;               
+            }
+            if(e.data.AxisLeftY < -axisThreshold){
+                stickTicks.down++;
+            }else{
+                stickTicks.down = 0;
             }
         }
     });
@@ -555,14 +461,21 @@ $(document).ready(function(){
     $(document).mouseup(function(){
         clicking = false;
     })
-    $('#playerWindow').mousemove(function(event){
-        if(clicking){
-            currentPos.x = event.clientX;
-            currentPos.y = event.clientY;
-            var xDiff = (currentPos.x + 90);
-            //console.log(xDiff);
-            dew.command('Player.Armor.SetUiModelRotation ' + xDiff);
+    $('span').has('.setting').mouseover(function(){
+        itemNumber = $(activePage+' span').has('.setting').index($(this));
+        if(itemNumber > -1){
+            updateSelection(itemNumber, false, false); 
+            setInfoBox($(this).find('.setting').attr('id'));
         }
+    });
+    $('#sVsync').on('change', function(){
+        alertBox('VSync changes requires a restart to take effect', false);
+    });
+    $('#okButton').on('click', function(){
+        hideAlert(true);
+    });
+    $('#dismissButton').on('click', function(){
+        dismissButton();
     });
 });
 
@@ -592,71 +505,65 @@ function setButtons(){
         $('#randomColors img').attr('src','dew://assets/buttons/' + response + '_Y.png');
         $('#applyButton img').attr('src','dew://assets/buttons/' + response + '_Start.png');
         $('#cancelButton img').attr('src','dew://assets/buttons/' + response + '_B.png');
+        $('#dismissButton img').attr('src','dew://assets/buttons/' + response + '_B.png');
+        $('#okButton img').attr('src','dew://assets/buttons/' + response + '_A.png');
         $('.tabs img').eq(0).attr('src','dew://assets/buttons/' + response + '_LB.png');
         $('.tabs img').eq(1).attr('src','dew://assets/buttons/' + response + '_RB.png');
     });
 }
 
-var bipedRotate = 270;
 dew.on('show', function(e){
-    bipedRotate = 270;
+    $('#settingsWindow').hide();
+    $('#blackLayer').hide();
     dew.getSessionInfo().then(function(i){
-        if(i.established){
-            if(i.mapName != "mainmenu"){
-                $('.tabs li').eq(0).hide();
-                if(i.isHost){
-                    $('.tabs li').eq(1).show();
-                }else{
-                    $('.tabs li').eq(1).hide();
-                }
-                $('.tabs li').eq(5).hide();
-            }else{
-                $('.tabs li').eq(0).show();
-                $('.tabs li').eq(5).show();  
-            }
-        }else{
-            $('.tabs li').eq(0).show();
-            $('.tabs li').eq(1).show();   
-            $('.tabs li').eq(5).show();            
+        if(i.mapName == "mainmenu"){
+            $('#blackLayer').fadeIn(200, function() {
+                dew.command('game.hideh3ui 1');
+                $('#settingsWindow').show();
+                $('#blackLayer').show();
+                initActive();
+                initGamepad();
+            }).fadeOut(200);
+        } else {
+            $('#settingsWindow').show();
+            initActive();
+            initGamepad();
         }
-        initActive();
     });
     setControlValues();
-    setButtons();
-    adjustBiped();
+
+});
+
+function initGamepad(){
     dew.command('Settings.Gamepad', {}).then(function(result){
         if(result == 1){
-            onControllerConnect();
             hasGP = true;
-            repGP = window.setInterval(checkGamepad,1000/60);
+            if(!repGP){
+                repGP = window.setInterval(checkGamepad,1000/60);
+            }
+            onControllerConnect();
+            setButtons();
+            $('button img,.tabs img').show();
         }else{
             onControllerDisconnect();
             hasGP = false;
             if(repGP){
                 window.clearInterval(repGP);
+                repGP = null;
             }
+            $('button img,.tabs img').hide();
         }
     });
-    dew.command('game.hideh3ui 1');
-});
+}
 
 dew.on('hide', function(e){
-    dew.command('Player.Armor.SetUiModelPosition -0.398312 -13.5218 25.5292');
-    dew.command('Player.Armor.SetUiModelRotation 270');
-    dew.command('game.hideh3ui 0');
     if(repGP){
         window.clearInterval(repGP);
+        repGP = null;
     }
+    hideAlert(false);
+    dew.command('Game.HideH3UI 0');
 });
-
-function rotateBiped(direction){
-    if(direction == "right"){
-        bipedRotate++;
-    }else{
-        bipedRotate--;
-    }
-    dew.command('Player.Armor.SetUiModelRotation '+bipedRotate);
-}
 
 function initActive(){
     tabIndex = 0;
@@ -682,14 +589,16 @@ function setControlValues(){
                         }else{
                             $('#'+result[0]).css('color','#ddd');
                         }
-                    }else if(result[1].startsWith('Input.ControllerSensitivityX')){ 
-                        var xVal = (setValue-90)/20;
-                        $('#lookSensitivity').val(xVal);
-                        $('#lookSensitivityText').val(xVal);
+                    }else if(result[1].startsWith('Input.ControllerSensitivityY')){
+                        $('#ySens, #ySensText').val(setValue);
+                        var h3Val = (setValue-30)/10;
+                        $('#lookSensitivity, #lookSensitivityText').val(h3Val);
                     }else if(result[1].startsWith('Settings.PostprocessingQuality')){
                         $('#'+result[0]).val(setValue);
                         if($('#sTextureResolution').val() == setValue && $('#sTextureFiltering').val() == setValue && $('#sLightningQuality').val() == setValue && $('#sEffectsQuality').val() == setValue && $('#sShadowQuality').val() == setValue && $('#sDetailsLevel').val() == setValue && $('#sPostprocessing').val() == setValue){
                             $('#sQualityPreset').val(setValue);
+                        }else if($('#sTextureResolution').val() == 'low' && $('#sTextureFiltering').val() == 'low' && $('#sLightningQuality').val() == setValue && $('#sEffectsQuality').val() == 'low' && $('#sShadowQuality').val() == 'medium' && $('#sDetailsLevel').val() == 'low' && $('#sPostprocessing').val() == 'low'){
+                            $('#sQualityPreset').val('low');
                         }else{
                             $('#sQualityPreset').val('custom');
                         }
@@ -717,22 +626,23 @@ function setControlValues(){
     })
 }
 
-function adjustBiped(){
-    //console.log(getAspectRatio());
-    if(getAspectRatio() == '4:3' || getAspectRatio() == '5:4' ){
-        dew.command('Player.Armor.SetUiModelPosition 0.048312 -13.6018 25.5232');
-    }else{
-        dew.command('Player.Armor.SetUiModelPosition 0.108312 -13.2518 25.5232');
-    }    
-}
-
 function switchPage(pageHash){
     itemNumber = 0;
     location.href=pageHash;
     activePage=pageHash;    
     if(hasGP){
-        updateSelection(0);
+        updateSelection(0, true, true);
     }
+    if(subPages.indexOf(pageHash) != -1){
+        $('#cancelButton').html('<img class="button">Back');
+    }else{
+        if(changeArray.length || bindChangeArray.length){
+            $('#cancelButton').html('<img class="button">Cancel');
+        }else{
+            $('#cancelButton').html('<img class="button">Close');
+        }
+    }
+    initGamepad();
 }
 
 function editControls(which){
@@ -756,35 +666,75 @@ function applySettings(i){
     }else{
         changeArray = [];
         dew.command('writeconfig');
+        dew.command('VoIP.Update');
+        if(subPages.indexOf(activePage) != -1){
+            $('#cancelButton').html('<img class="button">Back');
+        }else{
+            $('#cancelButton').html('<img class="button">Close');
+        }
+        $('#applyButton').hide();
+        initGamepad();
     }
 }
+
+function applyBindChanges(i){
+    if(i != bindChangeArray.length){    
+        if (bindChangeArray[i][1] == "Back") { bindChangeArray[i][1] = "Select"; }
+        if (bindChangeArray[i][1]) { bindChangeArray[i][1] = "\"" + bindChangeArray[i][1] + "\""; }
+        dew.command("Input.ControllerAction \"" + bindChangeArray[i][0] + "\" " + bindChangeArray[i][1], {}).then(function(){
+            i++;
+            applyBindChanges(i);            
+        }).catch(function (error){
+            console.log(error);
+            i++;
+            applyBindChanges(i);  
+        });
+    }else{
+        bindChangeArray = [];
+        dew.command('writeconfig');
+        if(subPages.indexOf(activePage) != -1){
+            $('#cancelButton').html('<img class="button">Back');
+        }else{
+            $('#cancelButton').html('<img class="button">Close');
+        }
+        initGamepad();
+    }
+}
+
 
 function applyButton(){
     if(window.location.hash == '#page5'){
         applyBinds();
         switchPage('#page2'); 
+        if(!changeArray.length && !bindChangeArray.length){
+            $('#applyButton').hide();
+        }
     }else if(window.location.hash == '#page4'){
         applySettings(0);
-        switchPage('#page3');    
-    }else if(window.location.hash == '#page9'){
-        switchPage('#page8');    
-    }else if(window.location.hash == '#page8'){
-        switchPage('#page2');    
+        switchPage('#page3');     
+    }else if(window.location.hash == '#page11'){ 
+        switchPage('#page8');        
     }else{
-        if(changeArray.length){
-            applySettings(0);           
+        if(changeArray.length || bindChangeArray.length){
+            applySettings(0); 
+            applyBindChanges(0);              
+            setButtons();            
         }else{
-            dew.hide();
+            effectReset();
         }
     }
 }
 
 function cancelButton(){
-    resetInstants();
-    itemNumber = 0;
     if(window.location.hash == '#page5'){
         initializeBindings(); 
-        switchPage('#page2');  
+        switchPage('#page2'); 
+        $('#cancelButton').html('<img class="button">Close');
+        $('#applyButton').hide();
+        if(hasGP){
+            setButtons();
+            $('button img,.tabs img').show();
+        }        
     }else if(window.location.hash == '#page4'){
         setControlValues();      
         switchPage('#page3');
@@ -792,19 +742,65 @@ function cancelButton(){
         switchPage('#page8');
     }else if(window.location.hash == '#page8'){ 
         switchPage('#page2');
+    }else if(window.location.hash == '#page11'){ 
+        switchPage('#page8');
+    }else if(changeArray.length || bindChangeArray.length){
+        alertBox('You have unapplied settings', true);
     }else{
-        dew.hide();
-        setControlValues();
-        changeArray = [];
+        itemNumber = 0;
+        effectReset();
     }
+}
+
+function dismissButton(){
+    hideAlert(false);
+    resetInstants();    
+    itemNumber = 0;
+    effectReset();
+    setControlValues();
+    changeArray = [];
+    if(bindChangeArray.length){
+        initializeBindings();
+        bindChangeArray = [];
+    }
+    $('#applyButton').hide();
+}
+
+exiting = false;
+function effectReset(){
+    // Prevent escape spamming
+    if(exiting)
+        return;
+    exiting = true;
+
+    dew.command('Game.PlaySound 0x0B04');
+    dew.getSessionInfo().then(function(i){
+        if(i.mapName == "mainmenu"){
+            $('#blackLayer').fadeIn(200, function(){
+                dew.command('game.hideh3ui 0');
+                $('#settingsWindow').hide();
+                $('#blackLayer').fadeOut(200, function(){
+                    dew.hide();
+                    $('#settingsWindow').show();
+                    exiting = false;
+                });
+            });
+        }else{
+            dew.hide();
+            exiting = false;
+        }
+    })
 }
 
 function applyBinds(){
     for(i=0; i<$('#bindBox tbody tr').length; i++){
-        var action = $('#bindBox tbody tr').eq(i).find('td').eq(0).text();
-        var primaryKey = $('#bindBox tbody tr').eq(i).find('input').eq(0).val();
-        var secondaryKey = $('#bindBox tbody tr').eq(i).find('input').eq(1).val();
-        dew.command('Input.KeyboardAction ' + action + ' ' + primaryKey + ' ' + secondaryKey);
+        var attr = $('#bindBox tbody tr').eq(i).attr('data-action');
+        if (typeof attr !== typeof undefined){
+            var action = $('#bindBox tbody tr').eq(i).attr('data-action');
+            var primaryKey = $('#bindBox tbody tr').eq(i).find('input').eq(0).val();
+            var secondaryKey = $('#bindBox tbody tr').eq(i).find('input').eq(1).val();
+            dew.command('Input.KeyboardAction ' + action + ' ' + primaryKey + ' ' + secondaryKey);
+        }
     }
     dew.command('writeconfig');
 }
@@ -850,24 +846,11 @@ function updateSprint(value){
     }
 }
 
-function getLuminance(hex) {
-    var r = parseInt(hex.slice(1, 3), 16),
-        g = parseInt(hex.slice(3, 5), 16),
-        b = parseInt(hex.slice(5, 7), 16);
-    var div = 255,
-        RGB = [r/div, g/div, b/div],
-        luminance = {r: 0.2126, g: 0.7152, b: 0.0722};
-    for (var i = RGB.length; i--; ) {
-        RGB[i] = RGB[i] <= 0.03928 ? RGB[i] / 12.92 : Math.pow(((RGB[i] + 0.055) / 1.055), 2.4);
-    }
-    return ((luminance.r * RGB[0]) + (luminance.g * RGB[1]) + (luminance.b * RGB[2]));
-}
-
 function applyBindString(bindString){
     var bindArray = new Array(bindString.split(','));
     for (i = 0; i < bindArray[0].length; i++) { 
-        $('#'+binds[i]).val(bindArray[0][i]);
-        updateBinding(binds[i], bindArray[0][i]);
+        $('#'+binds[i][0]).val(bindArray[0][i]);
+        queueBindChange([binds[i][0],bindArray[0][i]])
     }
     updateBindLabels();
 }
@@ -875,23 +858,30 @@ function applyBindString(bindString){
 function initializeBindings(){
     dew.command("Input.DumpBindingsJson", {}).then(function(response){
         $('#bindBox tbody').empty();
+        $('#bindBox tbody').each(function(){
+            $(this).append('<tr><th colspan="3">'+$(this).attr('class')+'</th></tr>');
+        });
         var bindDump = JSON.parse(response);
         for (i = 0; i < bindDump.length; i++){
             if(bindDump[i].controllerButton=="Select"){
                 bindDump[i].controllerButton="Back";
             }
             $('#'+bindDump[i].actionName).val(bindDump[i].controllerButton);
-            if($.inArray(bindDump[i].actionName, binds) > -1){
-                var primaryBind = bindDump[i].primaryKey;
-                if(bindDump[i].primaryMouseButton != 'none'){
-                    primaryBind = bindDump[i].primaryMouseButton;
+            $.grep(binds, function(result, index){   
+                if(result){
+                if(result[0] == bindDump[i].actionName){            
+                    var primaryBind = bindDump[i].primaryKey;
+                    if(bindDump[i].primaryMouseButton != 'none'){
+                        primaryBind = bindDump[i].primaryMouseButton;
+                    }
+                    var secondaryBind = bindDump[i].secondaryKey;
+                    if(bindDump[i].secondaryMouseButton != 'none'){
+                        secondaryBind = bindDump[i].secondaryMouseButton;
+                    }
+                    $('#bindBox .'+result[2]).append($('<tr data-action="'+result[0]+'"><td>'+result[1]+'</td><td><input class="keybind" value='+primaryBind+'></td><td><input class="keybind" value='+secondaryBind+'></td></tr>'));
                 }
-                var secondaryBind = bindDump[i].secondaryKey;
-                if(bindDump[i].secondaryMouseButton != 'none'){
-                    secondaryBind = bindDump[i].secondaryMouseButton;
                 }
-                $('#bindBox').find('tbody').append($('<tr><td>'+bindDump[i].actionName+'</td><td><input class="keybind" value='+primaryBind+'></td><td><input class="keybind" value='+secondaryBind+'></td></tr>'));
-            }
+            })
         }
         updateBindLabels();
         getCurrentBindString();
@@ -926,6 +916,9 @@ function initializeBindings(){
                 if((e.keyCode >= 65 && e.keyCode <= 90) || (e.keyCode >= 48 && e.keyCode < 58))
                     this_.val( String.fromCharCode(e.keyCode));
 
+                if(e.keyCode >= 96 && e.keyCode <=105)
+                    this_.val('Numpad'+String(parseInt(e.keyCode)-96))
+                
                 switch(e.keyCode){
                     case 8: 
                         this_.val('Back'); 
@@ -934,7 +927,11 @@ function initializeBindings(){
                         this_.val('Tab'); 
                     break;
                     case 13:
-                        this_.val('Enter');
+                        if(e.originalEvent.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD){
+                            this_.val('NumpadEnter');
+                        }else{
+                            this_.val('Enter');
+                        }
                     break;
                     case 16: 
                         if(e.originalEvent.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT){
@@ -956,11 +953,71 @@ function initializeBindings(){
                         }else{
                            this_.val('RAlt'); 
                         }  
+                    case 20: 
+                        this_.val('CapsLock'); 
+                    break;
                     case 32: 
                         this_.val('Space'); 
                     break;
+                    case 37: 
+                        this_.val('Left'); 
+                    break;
+                    case 38: 
+                        this_.val('Up'); 
+                    break;
+                    case 39: 
+                        this_.val('Right'); 
+                    break;
+                    case 40: 
+                        this_.val('Down'); 
+                    break;
                     case 46: 
                         this_.val('Delete'); 
+                    break;
+                    case 106: 
+                        this_.val('Multiply'); 
+                    break;
+                    case 107: 
+                        this_.val('Add'); 
+                    break;
+                    case 109: 
+                        this_.val('Subtract'); 
+                    break;
+                    case 110: 
+                        this_.val('Decimal'); 
+                    break;
+                    case 111: 
+                        this_.val('Divide'); 
+                    break;
+                    case 186: 
+                        this_.val('Colon'); 
+                    break;
+                    case 187: 
+                        this_.val('Plus'); 
+                    break;
+                    case 188: 
+                        this_.val('Comma'); 
+                    break;
+                    case 189: 
+                        this_.val('Minus'); 
+                    break;
+                    case 190: 
+                        this_.val('Period'); 
+                    break;
+                    case 191: 
+                        this_.val('Question'); 
+                    break;
+                    case 219: 
+                        this_.val('LBracket'); 
+                    break;
+                    case 220: 
+                        this_.val('Pipe'); 
+                    break;
+                    case 221: 
+                        this_.val('RBracket'); 
+                    break;
+                    case 222: 
+                        this_.val('Quote'); 
                     break;
                     default:
                         //console.log(e.keyCode);
@@ -1008,22 +1065,22 @@ function initializeBindings(){
                 $doc.off('mousewheel.rebind');
             }
         });
-    });
-}
-
-function updateBinding(action, bind){
-    if (bind == "Back") { bind = "Select"; }
-    if (bind) { bind = "\"" + bind + "\""; }
-    dew.command("Input.ControllerAction \"" + action + "\" " + bind, {}).then(function(){
-        dew.command("writeconfig");
+        $('.keybind').on('blur', function(e){
+            $('#cancelButton').html('<img class="button">Cancel');
+            $('#applyButton').show();
+            if(hasGP){
+                setButtons();
+                $('button img,.tabs img').show();
+            }
+        });
     });
 }
 
 function updateBindLabels(){
     $('#controllerGraphic').children('div').empty();
-    for (i = 0; i < binds.length-4; i++) { 
-        var bind = document.getElementById(binds[i]).value;
-        var action = binds[i];
+    for (i = 0; i < binds.length-8; i++) { 
+        var bind = document.getElementById(binds[i][0]).value;
+        var action = binds[i][0];
         if(document.getElementById(bind)){
             var actionString = action;
             if(document.getElementById(bind).innerHTML.length > 0){
@@ -1036,9 +1093,9 @@ function updateBindLabels(){
 
 function getCurrentBindString(){
     var currentBinds = "";
-    for(var i = 0; i < binds.length-4; i++) {
-        if($('#'+binds[i]).val()){
-            currentBinds += $('#'+binds[i]).val() + ",";
+    for(var i = 0; i < binds.length-8; i++) {
+        if($('#'+binds[i][0]).val()){
+            currentBinds += $('#'+binds[i][0]).val() + ",";
         }else{
             currentBinds += ",";
         }
@@ -1048,8 +1105,8 @@ function getCurrentBindString(){
 }
 
 function setButtonLists(){
-    for(var i = 0; i < binds.length-4; i++) {
-        var sel = document.getElementById(binds[i]);
+    for(var i = 0; i < binds.length-8; i++) {
+        var sel = document.getElementById(binds[i][0]);
         for(var x = 0; x < buttons.length; x++) {
             var opt = document.createElement('option');
             opt.innerHTML = buttons[x];
@@ -1058,46 +1115,19 @@ function setButtonLists(){
         }
     }
 }
-function randomArmor(){
-    var armorArray = ['armorHelmet','armorChest','armorShoulders','armorArms','armorLegs'];
-    for(var i = 0; i < armorArray.length; i++) {
-        var $options = $('#'+armorArray[i]).find('option'),
-            random = ~~(Math.random() * $options.length);
-        $options.eq(random).prop('selected', true);    
-        $.grep(settingsToLoad, function(result){
-            if(result[0] == armorArray[i]){
-                dew.command(result[1] + ' ' + $('#'+armorArray[i]).val());
-            };
-        });
-    }
-}
 
-function randomColors(){
-    var colorArray = ['colorsPrimary','colorsSecondary','colorsVisor','colorsLights','colorsHolo'];
-    for(var i = 0; i < colorArray.length; i++) {
-        var randomColor = '#'+Math.floor(Math.random()*16777215).toString(16).toUpperCase();
-        $('#'+colorArray[i]).css("background-color",randomColor);
-        if(getLuminance(randomColor)> 0.22){
-            $('#'+colorArray[i]).css("color","#222");
-        }else{
-            $('#'+colorArray[i]).css("color","#ddd");
-        }
-        $('#'+colorArray[i]).val(randomColor);
-        $.grep(settingsToLoad, function(result){
-            if(result[0] == colorArray[i]){
-                dew.command(result[1] + ' ' + randomColor);
-            };
-        });
-    }   
-}
-
-function updateSelection(item){
+function updateSelection(item, sound, move){
     colorIndex = 0;
     $('.selectedElement').removeClass('selectedElement');
     $(activePage + ' label:visible').eq(item).parent().addClass('selectedElement');
     selectedItem = $(activePage + ' .setting:visible').not('span').eq(itemNumber).attr('id');
-    $('#'+selectedItem).parent()[0].scrollIntoView(false);
-    dew.command('Game.PlaySound 0xAFE');
+    if(move){
+        $('#'+selectedItem).parent()[0].scrollIntoView(false);
+    }
+    if(sound){
+        dew.command('Game.PlaySound 0xAFE');
+    }
+    setInfoBox(selectedItem);
 }
 
 function prevPage(){
@@ -1116,35 +1146,25 @@ function nextPage(){
 function upNav(){
     if(itemNumber > 0){
         itemNumber--;
-        updateSelection(itemNumber);
+        updateSelection(itemNumber, true, true);
     }
 }
 
 function downNav(){
     if(itemNumber < $(activePage + ' label:visible').length-1){
         itemNumber++;
-        updateSelection(itemNumber);
+        updateSelection(itemNumber, true, true);
     }           
 }
 
 function onControllerConnect(){
-    updateSelection(itemNumber);
+    updateSelection(itemNumber, false, true);
     $('button img, .tabs img').show();
 }
 
 function onControllerDisconnect(){
     $('.selectedItem').removeClass(); 
     $('button img, .tabs img').hide();
-}
-
-function getAspectRatio(){
-    function gcd (a, b) {
-        return (b == 0) ? a : gcd (b, a%b);
-    }
-    var w = screen.width;
-    var h = screen.height;
-    var r = gcd (w, h);
-    return w/r+":"+h/r;
 }
 
 function resetInstants(){
@@ -1164,11 +1184,15 @@ function leftToggle(){
         if(elementIndex > 0){
             var newElement = elementIndex - 1;
             $('#'+selectedItem+' option').eq(newElement).prop('selected', true);
+            $('#'+selectedItem).trigger('change');
         }
     }
     if(document.getElementById(selectedItem).computedRole == "slider"){
-        document.getElementById(selectedItem).stepDown();
-        document.querySelector('#'+selectedItem +'Text').value = document.getElementById(selectedItem).value; 
+        if(document.getElementById(selectedItem).value > document.getElementById(selectedItem).min){
+            document.getElementById(selectedItem).stepDown();
+            document.querySelector('#'+selectedItem +'Text').value = document.getElementById(selectedItem).value; 
+            $('#'+selectedItem).trigger('change');
+        }
     }
     if($('#'+selectedItem).hasClass('color')){
         colorIndex = $.inArray($('#'+selectedItem).val(), h3ColorArray);
@@ -1180,24 +1204,24 @@ function leftToggle(){
         }
         setColor(h3ColorArray[colorIndex]);
     }
-    if(document.getElementById(selectedItem).computedRole == "combobox" || document.getElementById(selectedItem).computedRole == "slider" || $('#'+selectedItem).hasClass('color')){
-        $('#'+selectedItem).trigger('change');
-        dew.command('Game.PlaySound 0x0B00');  
-    }
 }
 
 function rightToggle(){
     if(document.getElementById(selectedItem).computedRole == "combobox"){
         var elementIndex = $('#'+selectedItem+' option:selected').index();
         var elementLength = $('#'+selectedItem).children('option').length;
-        if(elementIndex < elementLength){
+        if(elementIndex < elementLength - 1){
             var newElement = elementIndex + 1;
             $('#'+selectedItem+' option').eq(newElement).prop('selected', true);
+            $('#'+selectedItem).trigger('change');
         } 
     }
     if(document.getElementById(selectedItem).computedRole == "slider"){
-        document.getElementById(selectedItem).stepUp();
-        document.querySelector('#'+selectedItem +'Text').value = document.getElementById(selectedItem).value;   
+        if(parseInt(document.getElementById(selectedItem).value) < document.getElementById(selectedItem).max){
+            document.getElementById(selectedItem).stepUp();
+            document.querySelector('#'+selectedItem +'Text').value = document.getElementById(selectedItem).value;   
+            $('#'+selectedItem).trigger('change');
+        }
     }
     if($('#'+selectedItem).hasClass('color')){
         colorIndex = $.inArray( $('#'+selectedItem).val(), h3ColorArray);
@@ -1209,20 +1233,6 @@ function rightToggle(){
         }
         setColor(h3ColorArray[colorIndex]);
     }
-    if(document.getElementById(selectedItem).computedRole == "combobox" || document.getElementById(selectedItem).computedRole == "slider" || $('#'+selectedItem).hasClass('color')){
-        $('#'+selectedItem).trigger('change');
-        dew.command('Game.PlaySound 0x0B00');  
-    }
-}
-
-function setColor(colorHex){
-    $('#'+selectedItem).css('background-color',colorHex);   
-    $('#'+selectedItem).val(colorHex); 
-    if(getLuminance(colorHex)> 0.22){
-        $('#'+selectedItem).css('color','#222');
-    }else{
-        $('#'+selectedItem).css('color','#ddd');
-    }      
 }
 
 function toggleSetting(){
@@ -1232,19 +1242,17 @@ function toggleSetting(){
         }else{
             document.getElementById(selectedItem).checked = true;
         }
-        $('#'+selectedItem).trigger('change');
-        dew.command('Game.PlaySound 0x0B00');  
+        $('#'+selectedItem).trigger('change'); 
     }       
 }
 
-function updateSensitivity(value){
-    var xVal = 90 + (value * 20);
-    dew.command("Input.ControllerSensitivityX " + xVal, {}).then(function(){
-        dew.command("writeconfig");
-    });
-}
-
 function queueChange(changeBlock){
+    $('#cancelButton').html('<img class="button">Cancel');
+    $('#applyButton').show();
+    if(hasGP){
+        setButtons();
+        $('button img,.tabs img').show();
+    }
     $.grep(changeArray, function(result, index){
         if(result){
             if(result[0] == changeBlock[0]){
@@ -1253,4 +1261,52 @@ function queueChange(changeBlock){
         }
     });
     changeArray.push(changeBlock);
+}
+
+function alertBox(alertText, dismissButton){
+    if(dismissButton){
+        $('#dismissButton').show();
+    }else{
+        $('#dismissButton').hide();
+    }
+    $('#wDescription').text(alertText);
+    $('#alertBox').fadeIn(100);
+    activePage = activePage+'alertBox';
+    dew.command('Game.PlaySound 0x0B02');
+}
+
+function hideAlert(sound){
+    $('#alertBox').hide();
+    activePage = activePage.replace('alertBox', ''); 
+    if(sound){
+        dew.command('Game.PlaySound 0x0B04');
+    }
+}
+
+function queueBindChange(changeBlock){
+    $('#cancelButton').html('<img class="button">Cancel');
+    $('#applyButton').show();
+    if(hasGP){
+        setButtons();
+        $('button img,.tabs img').show();
+    }
+    $.grep(bindChangeArray, function(result, index){
+        if(result){
+            if(result[0] == changeBlock[0]){
+                bindChangeArray.splice(index,1);
+            };
+        }
+    });
+    bindChangeArray.push(changeBlock);
+}
+
+function setInfoBox(ID){
+    $.grep(settingsToLoad, function(result, index){
+        if(result){
+            if(result[0] == ID){
+                $('#infoHeader').text(result[2]);
+                $('#infoText').text(result[3]);
+            };
+        }
+    });    
 }

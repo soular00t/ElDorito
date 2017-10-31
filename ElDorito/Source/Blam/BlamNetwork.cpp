@@ -74,6 +74,11 @@ namespace Blam::Network
 		return PlayerSessions[playerIndex].Properties.TeamIndex;
 	}
 
+	PlayerSession SessionMembership::GetLocalPlayerSession() const
+	{
+		return PlayerSessions[GetPeerPlayer(LocalPeerIndex)];
+	}
+
 	void SessionMembership::Update()
 	{
 		// The engine does this all over the place
@@ -103,7 +108,7 @@ namespace Blam::Network
 			memset(this, 0, sizeof(*this));
 			return;
 		}
-			
+
 		typedef void(*InitPacketPtr)(int addressIndex, PacketHeader *packet);
 		auto InitPacket = reinterpret_cast<InitPacketPtr>(0x482040);
 		InitPacket(session->AddressIndex, this);
@@ -151,6 +156,12 @@ namespace Blam::Network
 		return Observer->Channels[MembershipInfo.PeerChannels[MembershipInfo.HostPeerIndex].ChannelIndex].Address;
 	}
 
+	int SessionParameters::GetSessionMode()
+	{
+		typedef int(__thiscall *GetSessionModePtr)(SessionParameters *thisPtr);
+		auto GetSessionMode = reinterpret_cast<GetSessionModePtr>(0x458FE0);
+		return GetSessionMode(this);
+	}
 	bool SessionParameters::SetSessionMode(int mode)
 	{
 		typedef bool(__thiscall *SetSessionModePtr)(SessionParameters *thisPtr, int mode);
@@ -223,6 +234,30 @@ namespace Blam::Network
 		typedef bool(__cdecl *Network_squad_session_end_gamePtr)();
 		auto Network_squad_session_end_game = reinterpret_cast<Network_squad_session_end_gamePtr>(0x438780);
 		return Network_squad_session_end_game();
+	}
+
+	int GetLobbyType() {
+		auto Get_Type = (int(__cdecl*)())(0x00435640);
+		return Get_Type();
+	}
+
+	// Gets the network mode
+	int GetNetworkMode() {
+		auto Get_Mode = (int(__cdecl*)())(0x00A7F160);
+		return Get_Mode();
+	}
+
+	bool SetNetworkMode(int mode)
+	{
+		auto Set_Network_Mode = (bool(__cdecl*)(int))(0x00A7F950);
+		return Set_Network_Mode(mode);
+	}
+	
+	bool Disconnect()
+	{
+		typedef bool(__cdecl *Network_network_life_cycle_endPtr)();
+		auto Network_network_life_cycle_end = reinterpret_cast<Network_network_life_cycle_endPtr>(0x454B40);
+		return Network_network_life_cycle_end();
 	}
 
 	void LeaveGame()

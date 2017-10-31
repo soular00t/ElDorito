@@ -21,7 +21,9 @@
 #include "../Server/Signaling.hpp"
 #include "../Server/VariableSynchronization.hpp"
 #include "../Patches/Assassination.hpp"
+#include "../Web/Ui/VotingScreen.hpp"
 #include "../Patches/Sprint.hpp"
+#include "../Patches/BottomlessClip.hpp"
 #include "../Server/BanList.hpp"
 #include "../Server/ServerChat.hpp"
 #include "ModulePlayer.hpp"
@@ -30,6 +32,15 @@
 
 namespace
 {
+	bool VarServerNameUpdated(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		//Trim server name to 128 characters
+		if (Modules::ModuleServer::Instance().VarServerName->ValueString.length() > 128)
+			Modules::ModuleServer::Instance().VarServerName->ValueString = Modules::ModuleServer::Instance().VarServerName->ValueString.substr(0, 128);
+
+		return true;
+	}
+
 	bool VariableServerCountdownUpdate(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		unsigned long seconds = Modules::ModuleServer::Instance().VarServerCountdown->ValueInt;
@@ -64,7 +75,7 @@ namespace
 	// retrieves master server endpoints from dewrito.json
 	void GetEndpoints(std::vector<std::string>& destVect, std::string endpointType)
 	{
-		std::ifstream in("dewrito.json", std::ios::in | std::ios::binary);
+		std::ifstream in("mods/dewrito.json", std::ios::in | std::ios::binary);
 		if (in && in.is_open())
 		{
 			std::string contents;
@@ -433,7 +444,7 @@ namespace
 		return true;
 	}
 
-	int FindPlayerByName(const std::string &name)
+	int FindPlayerByName(const std::string &name, bool findPeer = false)
 	{
 		auto* session = Blam::Network::GetActiveSession();
 		if (!session || !session->IsEstablished() || !session->IsHost())
@@ -445,8 +456,13 @@ namespace
 			if (playerIdx == -1)
 				continue;
 			auto* player = &membership->PlayerSessions[playerIdx];
-			if (Utils::String::ThinString(player->Properties.DisplayName) == name)
-				return playerIdx;
+			if (Utils::String::ThinString(player->Properties.DisplayName) == name) {
+				if (findPeer)
+					return peerIdx;
+				else
+					return playerIdx;
+			}
+
 		}
 		return -1;
 	}
@@ -517,7 +533,30 @@ namespace
 			returnInfo = "Player \"" + kickPlayerName + "\" not found.";
 			return false;
 		}
-		auto ip = session->GetPeerAddress(session->MembershipInfo.GetPlayerPeer(playerIdx)).ToString();
+		auto peer = session->MembershipInfo.GetPlayerPeer(playerIdx);
+		if (peer == session->MembershipInfo.HostPeerIndex)
+		{
+			returnInfo = "You cannot kick yourself.";
+			return false;
+		}
+
+		std::stringstream ss;
+		ss << "You have been ";
+		switch(type)
+		{
+		case KickType::Ban:
+			ss << "banned.";
+			break;
+		case KickType::TempBan:
+			ss << "temporarily banned.";
+			break;
+		case KickType::Kick:
+			ss << "kicked.";
+			break;
+		}
+
+		Server::Chat::SendServerMessage(ss.str().c_str(), peer);
+		auto ip = session->GetPeerAddress(peer).ToString();
 		if (!Blam::Network::BootPlayer(playerIdx, 4))
 		{
 			returnInfo = "Failed to kick player " + kickPlayerName;
@@ -738,7 +777,9 @@ namespace
 		{
 			auto player = session->MembershipInfo.PlayerSessions[playerIdx];
 			auto name = Utils::String::ThinString(player.Properties.DisplayName);
-			ss << std::dec << "[" << playerIdx << "] \"" << name << "\" (uid: " << std::hex << player.Properties.Uid;
+			char uid[17];
+			Blam::Players::FormatUid(uid, player.Properties.Uid);
+			ss << std::dec << "[" << playerIdx << "] \"" << name << "\" (uid: " << uid;
 			if (session->IsHost())
 			{
 				auto ip = session->GetPeerAddress(session->MembershipInfo.GetPlayerPeer(playerIdx));
@@ -778,10 +819,11 @@ namespace
 			writer.Key("teamIndex");
 			writer.Int(player.Properties.TeamIndex);
 
-			std::string uidStr;
-			Utils::String::BytesToHexString(&player.Properties.Uid, sizeof(uint64_t), uidStr);
+			char uid[17];
+			Blam::Players::FormatUid(uid, player.Properties.Uid);
+
 			writer.Key("UID");
-			writer.String(uidStr.c_str());
+			writer.String(uid);
 
 			std::stringstream color;
 			color << "#" << std::setw(6) << std::setfill('0') << std::hex << player.Properties.Customization.Colors[Blam::Players::ColorIndices::Primary];
@@ -802,13 +844,32 @@ namespace
 
 	bool CommandServerMode(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
+		
+		if (Arguments.size() < 1 || Arguments.size() > 1) {
+			returnInfo = std::to_string(Blam::Network::GetNetworkMode());
+			return true;
+		}
 
-		typedef bool(__cdecl *SetGameOnlineFunc)(int a1);
-		const SetGameOnlineFunc Server_Set_Mode = reinterpret_cast<SetGameOnlineFunc>(0xA7F950);
-		bool retVal = Server_Set_Mode(Modules::ModuleServer::Instance().VarServerMode->ValueInt);
+		auto previous = std::to_string(Blam::Network::GetNetworkMode());
+		auto serverMode = -1;
+		try
+		{
+			serverMode = std::atoi(Arguments[0].c_str());
+		}
+		catch (std::logic_error&)
+		{
+		}
+
+		if (serverMode < 0 || serverMode > 4) {
+			returnInfo = "0 = Xbox Live (Open Party); 1 = Xbox Live (Friends Only); 2 = Xbox Live (Invite Only); 3 = Online; 4 = Offline;";
+			return false;
+		}
+
+		
+		bool retVal = Blam::Network::SetNetworkMode(serverMode);
 		if (retVal)
 		{
-			returnInfo = "Changed game mode to " + Modules::ModuleServer::Instance().VarServerMode->ValueString;
+			returnInfo = "Changed network mode " + previous + " -> " + std::to_string(serverMode);
 			return true;
 		}
 		returnInfo = "Hmm, weird. Are you at the main menu?";
@@ -817,12 +878,34 @@ namespace
 
 	bool CommandServerLobbyType(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
-		typedef bool(__cdecl *SetLobbyType)(int a1);
-		const SetLobbyType Server_Lobby_Type = reinterpret_cast<SetLobbyType>(0xA7EE70);
-		bool retVal1 = Server_Lobby_Type(Modules::ModuleServer::Instance().VarServerLobbyType->ValueInt);
-		if (retVal1)
+		
+		
+		if (Arguments.size() < 1 || Arguments.size() > 1) {
+			returnInfo = std::to_string(Blam::Network::GetLobbyType());
+			return true;
+		}
+
+		auto previous = std::to_string(Blam::Network::GetLobbyType());
+		auto lobbyType = -1;
+		try
 		{
-			returnInfo = "Changed lobby type to " + Modules::ModuleServer::Instance().VarServerLobbyType->ValueString;
+			lobbyType = std::atoi(Arguments[0].c_str());
+		}
+		catch (std::logic_error&)
+		{
+		}
+
+		if (lobbyType < 0 || lobbyType > 4) {
+			returnInfo = "0 = Campaign; 1 = Matchmaking; 2 = Multiplayer; 3 = Forge; 4 = Theater;";
+			return false;
+		}
+
+
+		auto set_server_lobby_type = (bool(__cdecl*)(int))(0x00A7EE70);
+		bool retVal = set_server_lobby_type(lobbyType);
+		if (retVal)
+		{
+			returnInfo = "Changed lobby type " + previous + " -> " + std::to_string(lobbyType);
 			return true;
 		}
 		return false;
@@ -831,7 +914,7 @@ namespace
 	uint16_t PingId;
 	bool CommandServerPing(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
-		if (Arguments.size() > 1)
+		if (Arguments.size() > 2)
 		{
 			returnInfo = "Invalid arguments";
 			return false;
@@ -845,10 +928,25 @@ namespace
 		}
 
 		// If an IP address was passed, send to that address
-		if (Arguments.size() == 1)
+		if (Arguments.size() > 0)
 		{
 			Blam::Network::NetworkAddress blamAddress;
-			if (!Blam::Network::NetworkAddress::Parse(Arguments[0], 11774, &blamAddress))
+		    uint16_t port = 11774;
+
+			if (Arguments.size() == 2)
+			{
+				try
+				{
+					port = std::atoi(Arguments[1].c_str());
+				}
+				catch (std::logic_error&)
+				{
+					returnInfo = "Invalid Port Supplied";
+					return false;
+				}
+			}
+
+			if (!Blam::Network::NetworkAddress::Parse(Arguments[0], port, &blamAddress))
 			{
 				returnInfo = "Invalid IPv4 address";
 				return false;
@@ -913,6 +1011,12 @@ namespace
 			return false;
 		}
 
+		if(numPlayers < 2)
+		{
+			returnInfo = "Need at least 2 players to shuffle the teams";
+			return false;
+		}
+
 		// Shuffle it
 		static std::random_device rng;
 		static std::mt19937 urng(rng());
@@ -964,6 +1068,14 @@ namespace
 		return true;
 	}
 
+	bool BottomlessClipEnabledChanged(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		auto &serverModule = Modules::ModuleServer::Instance();
+		auto enabled = serverModule.VarServerBottomlessClipEnabledClient->ValueInt != 0;
+		Patches::BottomlessClip::Toggle(enabled);
+		return true;
+	}
+
 	bool UnlimitedSprintEnabledChanged(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		auto &serverModule = Modules::ModuleServer::Instance();
@@ -975,7 +1087,7 @@ namespace
 	bool AssassinationDisabledChanged(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
 		auto &serverModule = Modules::ModuleServer::Instance();
-		auto enabled = serverModule.VarServerAssassinationEnabled->ValueInt != 0;
+		auto enabled = serverModule.VarServerAssassinationEnabledClient ->ValueInt != 0;
 		Patches::Assassination::Enable(enabled);
 		return true;
 	}
@@ -1007,6 +1119,9 @@ namespace
 	}
 	bool CommandServerCancelVote(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
+		if(!ElDorito::Instance().IsDedicated())
+			Web::Ui::Voting::Hide();
+
 		Server::Voting::CancelVoteInProgress();
 		return true;
 	}
@@ -1029,23 +1144,56 @@ namespace
 		{
 			message += word + " ";
 		}
-		Server::Chat::SendServerMessage(message);
+		Server::Chat::SendAndLogServerMessage(message);
 		return true;
 	}
-	bool ReloadVotingJson(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	bool CommandServerPM(const std::vector<std::string>& Arguments, std::string& returnInfo)
 	{
-		if (Arguments.size() < 1)
+		if (Arguments.size() <= 1)
 		{
 			returnInfo = "Invalid arguments";
 			return false;
 		}
 
-		auto jsonName = Arguments[0];
-		if (Server::Voting::ReloadVotingJson(jsonName))
-			returnInfo = "Success";
-		else
-			returnInfo = "Failure. Using default maps instead";
+		auto playerName = Arguments[0];
+		std::string message = Arguments[1];
 
+		auto* session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished() || !session->IsHost())
+		{
+			returnInfo = "You must be hosting a game to use this command";
+			return false;
+		}
+		auto peer = FindPlayerByName(playerName, true);
+		if (peer < 0)
+		{
+			returnInfo = "Player \"" + playerName + "\" not found.";
+			return false;
+		}
+		Server::Chat::SendServerMessage("(PM) " + message, peer);
+
+		return true;
+	}
+	bool ReloadVetoJson(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (!Server::Voting::ReloadVetoJson())
+		{
+			returnInfo = "Failed - Defaults used instead - Check log.";
+			return false;
+		}
+		returnInfo = "Success";
+		return true;
+	}
+
+	//At some point voting should be made it's own module, because it is littering the server module pretty hard. 
+	bool ReloadVotingJson(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (!Server::Voting::ReloadVotingJson())
+		{
+			returnInfo = "Failed - Defaults used instead - Check log.";
+			return false;
+		}
+		returnInfo = "Success";
 		return true;
 	}
 	bool CommandWebsocketInfo(const std::vector<std::string>& Arguments, std::string& returnInfo)
@@ -1127,7 +1275,7 @@ namespace Modules
 {
 	ModuleServer::ModuleServer() : ModuleBase("Server")
 	{
-		VarServerName = AddVariableString("Name", "server_name", "The name of the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), "HaloOnline Server");
+		VarServerName = AddVariableString("Name", "server_name", "The name of the server (limited to 128 characters)", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), "HaloOnline Server", VarServerNameUpdated);
 		VarServerNameClient = AddVariableString("NameClient", "server_name_client", "", eCommandFlagsInternal);
 		Server::VariableSynchronization::Synchronize(VarServerName, VarServerNameClient);
 
@@ -1191,19 +1339,25 @@ namespace Modules
 		VarMaxTeamSize->ValueIntMax = 16;
 
 		AddCommand("Say", "say", "Sends a chat message as the server", eCommandFlagsHostOnly, CommandServerSay);
+		AddCommand("PM", "pm", "Sends a pm to a player as the server. First argument is the player name, second is the message in quotes", eCommandFlagsHostOnly, CommandServerPM);
+
 		AddCommand("SubmitVote", "submitvote", "Sumbits a vote", eCommandFlagsNone, CommandServerSubmitVote, { "The vote to send to the host" });
 
-		VarServerMode = AddVariableInt("Mode", "mode", "Changes the game mode for the server. 0 = Xbox Live (Open Party); 1 = Xbox Live (Friends Only); 2 = Xbox Live (Invite Only); 3 = Online; 4 = Offline;", eCommandFlagsNone, 4, CommandServerMode);
-		VarServerMode->ValueIntMin = 0;
-		VarServerMode->ValueIntMax = 4;
+		AddCommand("Mode", "mode", "Changes the network mode for the server. 0 = Xbox Live (Open Party); 1 = Xbox Live (Friends Only); 2 = Xbox Live (Invite Only); 3 = Online; 4 = Offline;", eCommandFlagsNone, CommandServerMode, { "The network mode" });
 
-		VarServerLobbyType = AddVariableInt("LobbyType", "lobbytype", "Changes the lobby type for the server. 0 = Campaign; 1 = Matchmaking; 2 = Multiplayer; 3 = Forge; 4 = Theater;", eCommandFlagsDontUpdateInitial, 2, CommandServerLobbyType);
-		VarServerLobbyType->ValueIntMin = 0;
-		VarServerLobbyType->ValueIntMax = 4;
+		AddCommand("LobbyType", "lobbytype", "Changes the lobby type for the server. 0 = Campaign; 1 = Matchmaking; 2 = Multiplayer; 3 = Forge; 4 = Theater;", eCommandFlagsNone, CommandServerLobbyType, { "The lobby type" });
 
-		VarServerSprintEnabled = AddVariableInt("SprintEnabled", "sprint", "Controls whether sprint is enabled on the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), 1);
-		VarServerSprintEnabledClient = AddVariableInt("SprintEnabledClient", "sprint_client", "", eCommandFlagsInternal, 1, SprintEnabledChanged);
+		VarServerDedicated = AddVariableInt("Dedicated", "dedicated", "Used only to let clients know if the server is dedicated or not",  eCommandFlagsReplicated, 0);
+		VarServerDedicatedClient = AddVariableInt("DedicatedClient", "dedicated_client", "", eCommandFlagsInternal, 0);
+		Server::VariableSynchronization::Synchronize(VarServerDedicated, VarServerDedicatedClient);
+
+		VarServerSprintEnabled = AddVariableInt("SprintEnabled", "sprint", "Controls whether sprint is enabled on the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), 0);
+		VarServerSprintEnabledClient = AddVariableInt("SprintEnabledClient", "sprint_client", "", eCommandFlagsInternal, 0, SprintEnabledChanged);
 		Server::VariableSynchronization::Synchronize(VarServerSprintEnabled, VarServerSprintEnabledClient);
+
+		VarServerBottomlessClipEnabled = AddVariableInt("BottomlessClipEnabled", "bottomlessclip", "Controls whether bottomless clip is enabled on the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), 0);
+		VarServerBottomlessClipEnabledClient = AddVariableInt("BottomlessClipEnabledClient", "bottomlessclip_client", "", eCommandFlagsInternal, 0, BottomlessClipEnabledChanged);
+		Server::VariableSynchronization::Synchronize(VarServerBottomlessClipEnabled, VarServerBottomlessClipEnabledClient);
 
 		VarServerSprintUnlimited = AddVariableInt("UnlimitedSprint", "unlimited_sprint", "Controls whether unlimited sprint is enabled on the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), 0);
 		VarServerSprintUnlimitedClient = AddVariableInt("UnlimitedSprintClient", "unlimited_sprint_client", "", eCommandFlagsInternal, 0, UnlimitedSprintEnabledChanged);
@@ -1217,7 +1371,9 @@ namespace Modules
 		VarPlayersInfoClient = AddVariableString("PlayersInfoClient", "players_info_client", "Emblem and Rank info for each player", eCommandFlagsInternal, "{}" );
 		Server::VariableSynchronization::Synchronize(VarPlayersInfo, VarPlayersInfoClient);
 
-		VarServerAssassinationEnabled = AddVariableInt("AssassinationEnabled", "assassination", "Controls whether assassinations are enabled on the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), 1, AssassinationDisabledChanged);
+		VarServerAssassinationEnabled = AddVariableInt("AssassinationEnabled", "assassination", "Controls whether assassinations are enabled on the server", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsReplicated), 0);
+		VarServerAssassinationEnabledClient = AddVariableInt("AssassinationEnabledClient", "assassination_client", "Controls whether assassinations are enabled on the server", eCommandFlagsInternal, 0, AssassinationDisabledChanged);
+		Server::VariableSynchronization::Synchronize(VarServerAssassinationEnabled, VarServerAssassinationEnabledClient);
 
 		// TODO: Fine-tune these default values
 		VarFloodFilterEnabled = AddVariableInt("FloodFilterEnabled", "floodfilter", "Controls whether chat flood filtering is enabled", eCommandFlagsArchived, 1);
@@ -1228,7 +1384,7 @@ namespace Modules
 		VarFloodTimeoutResetSeconds = AddVariableInt("FloodTimeoutResetSeconds", "floodtimeoutreset", "Sets the period in seconds before a spammer's next timeout is reset", eCommandFlagsArchived, 1800);
 
 		VarChatLogEnabled = AddVariableInt("ChatLogEnabled", "chatlog", "Controls whether chat logging is enabled", eCommandFlagsArchived, 1);
-		VarChatLogPath = AddVariableString("ChatLogFile", "chatlogfile", "Sets the name of the file to log chat to", eCommandFlagsArchived, "chat.log");
+		VarChatLogFile = AddVariableString("ChatLogFile", "chatlogfile", "Sets the name of the file to log chat to", eCommandFlagsArchived, "chat.log");
 
 		VarServerVotingEnabled = AddVariableInt("VotingEnabled", "voting_enabled", "Controls whether the map voting system is enabled on this server. ", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsHostOnly), 0);
 		VarServerVotingEnabled->ValueIntMin = 0;
@@ -1246,12 +1402,7 @@ namespace Modules
 		VarServerNumberOfVotingOptions->ValueIntMin = 1;
 		VarServerNumberOfVotingOptions->ValueIntMax = 4;
 
-		VarServerAutoHost = AddVariableInt("AutoHost", "autohost", "Whether or not the game will automatically host a game on launch. Only works in dedi mode.", static_cast<CommandFlags>(eCommandFlagsArchived | eCommandFlagsHostOnly), 1);
-		VarServerAutoHost->ValueIntMin = 0;
-		VarServerAutoHost->ValueIntMax = 1;
-
 		VarRconPassword = AddVariableString("RconPassword", "rconpassword", "Password for the remote console", eCommandFlagsArchived, "");
-		VarStatsServer = AddVariableString("StatsServer", "stats_server", "URL to send the stats to", eCommandFlagsArchived, "");
 		VarPlayerInfoEndpoint = AddVariableString("PlayerInfoEndpoint", "player_info_endpoint", "URL to request player info from", eCommandFlagsArchived, "");
 		VarChatCommandKickPlayerEnabled = AddVariableInt("ChatCommandKickPlayerEnabled", "chat_command_kick_player_enabled", "Controls whether or not players can vote to kick someone. ", eCommandFlagsArchived, 1);
 		VarChatCommandKickPlayerEnabled->ValueIntMin = 0;
@@ -1293,7 +1444,11 @@ namespace Modules
 		VarServerTeamShuffleEnabled->ValueIntMin = 0;
 		VarServerTeamShuffleEnabled->ValueIntMax = 1;
 
-		AddCommand("ReloadVotingJson", "reload_voting_json", "Reloads the voting options with the given json", eCommandFlagsNone, ReloadVotingJson);
+		VarVotingJsonPath = AddVariableString("VotingJsonPath", "voting_json_path", "Voting Json Path", eCommandFlagsArchived, "mods/server/voting.json");
+		VarVetoJsonPath = AddVariableString("VetoJsonPath", "veto_json_path", "VetoJsonPath", eCommandFlagsArchived, "mods/server/veto.json");
+
+		AddCommand("ReloadVotingJson", "reload_voting_json", "Manually Reloads Json", eCommandFlagsNone, ReloadVotingJson);
+		AddCommand("ReloadVetoJson", "reload_veto_json", "Manually Reloads Json", eCommandFlagsNone, ReloadVetoJson);
 
 		AddCommand("WebsocketInfo", "websocketinfo", "Display the websocket password for the current server", eCommandFlagsNone, CommandWebsocketInfo);
 
@@ -1322,7 +1477,7 @@ namespace Modules
 		VarVetoVotePassPercentage->ValueIntMin = 1;
 		VarVetoVotePassPercentage->ValueIntMax = 100;
 
-		VarVetoSystemSelectionType = AddVariableInt("VetoSystemSelectionType", "veto_system_selection_type", "0 for ordered, 1 for random ", eCommandFlagsArchived, 1);
+		VarVetoSystemSelectionType = AddVariableInt("VetoSystemSelectionType", "veto_system_selection_type", "0 for random, 1 for ordered ", eCommandFlagsArchived, 0);
 		VarVetoSystemSelectionType->ValueIntMin = 0;
 		VarVetoSystemSelectionType->ValueIntMax = 1;
 
@@ -1335,5 +1490,56 @@ namespace Modules
 #endif
 
 		PingId = Patches::Network::OnPong(PongReceived);
+		refreshNonAllowedNames();
+	}
+
+	void ModuleServer::refreshNonAllowedNames() {
+
+		NonAllowedNames.clear();
+		std::ifstream in("mods/server/server.json", std::ios::in | std::ios::binary);
+		if (in && in.is_open())
+		{
+			std::string contents;
+			in.seekg(0, std::ios::end);
+			contents.resize((unsigned int)in.tellg());
+			in.seekg(0, std::ios::beg);
+			in.read(&contents[0], contents.size());
+			in.close();
+
+			rapidjson::Document json;
+			if (!json.Parse<0>(contents.c_str()).HasParseError() && json.IsObject())
+			{
+				if (json.HasMember("nonAllowedNames"))
+				{
+					auto& namesArray = json["nonAllowedNames"];
+					for (rapidjson::SizeType i = 0; i < namesArray.Size(); i++)
+					{
+						std::string name = namesArray[i].GetString();
+						std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+						NonAllowedNames.insert(name);
+					}
+				}
+			}
+		}
+		else {
+			//need to create file
+			std::ofstream outFile("mods/server/server.json", std::ios::out | std::ios::binary);
+			if (outFile.fail())
+			{
+				Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "Failed to create server.json");
+				return;
+			}
+			rapidjson::StringBuffer s;
+			rapidjson::Writer<rapidjson::StringBuffer> writer(s);
+			writer.StartObject();
+			writer.Key("nonAllowedNames");
+			writer.StartArray();
+			writer.EndArray();
+			writer.EndObject();
+
+			outFile << s.GetString();
+
+		}
+
 	}
 }

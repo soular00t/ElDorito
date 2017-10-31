@@ -11,6 +11,9 @@
 #include "../Modules/ModuleGame.hpp"
 #include "../Modules/ModuleServer.hpp"
 #include "../Modules/ModulePlayer.hpp"
+#include "boost/filesystem.hpp"
+#include <codecvt>
+#include <Shlobj.h>
 
 namespace
 {
@@ -26,6 +29,8 @@ namespace
 	void GameStartHook();
 	void __fastcall EdgeDropHook(void* thisptr, void* unused, int a2, int a3, int a4, float* a5);
 	char GetBinkVideoPathHook(int p_VideoID, char *p_DestBuf);
+	void DirtyDiskErrorHook();
+	int __cdecl GetScreenshotFolderHook(wchar_t *path);
 
 	std::vector<Patches::Core::ShutdownCallback> shutdownCallbacks;
 	std::string MapsFolder;
@@ -34,10 +39,10 @@ namespace
 	std::string TagsPath;
 	std::string TagListPath;
 	std::string ResourcesPath;
+	std::string ResourcesBPath;
 	std::string TexturesPath;
 	std::string TexturesBPath;
 	std::string AudioPath;
-	std::string VideoPath;
 	std::string FontsPath;
 
 	std::vector<Patches::Core::MapLoadedCallback> mapLoadedCallbacks;
@@ -128,6 +133,16 @@ namespace Patches::Core
 		Hook(0x324701, EdgeDropHook, HookFlags::IsCall).Apply();
 
 		Hook(0x10590B, GetBinkVideoPathHook, HookFlags::IsCall).Apply();
+
+#ifndef _DEBUG
+		// Dirty disk error at 0x0xA9F6D0 is disabled in this build
+		Hook(0x69F6C0, DirtyDiskErrorHook).Apply();
+#endif
+
+		Hook(0x20F4AD, GetScreenshotFolderHook, HookFlags::IsCall).Apply();
+		Hook(0x20F44B, GetScreenshotFolderHook, HookFlags::IsCall).Apply();
+
+		Pointer(0x530FAA).Write<float>(7); // podium duration in seconds
 	}
 
 	void OnShutdown(ShutdownCallback callback)
@@ -154,10 +169,10 @@ namespace Patches::Core
 		TagsPath = MapsFolder + "tags.dat";
 		TagListPath = MapsFolder + "tag_list.csv";
 		ResourcesPath = MapsFolder + "resources.dat";
+		ResourcesBPath = MapsFolder + "resources_b.dat";
 		TexturesPath = MapsFolder + "textures.dat";
 		TexturesBPath = MapsFolder + "textures_b.dat";
 		AudioPath = MapsFolder + "audio.dat";
-		VideoPath = MapsFolder + "video.dat";
 		FontsPath = MapsFolder + "fonts\\";
 
 		Pointer::Base(0x1AC050).Write(MapFormatString.c_str());
@@ -166,10 +181,10 @@ namespace Patches::Core
 		Pointer::Base(0x149CFF0).Write(TagsPath.c_str());
 		Pointer::Base(0x149CFF4).Write(TagListPath.c_str());
 		Pointer::Base(0x149CFF8).Write(ResourcesPath.c_str());
+		Pointer::Base(0x149D008).Write(ResourcesBPath.c_str());
 		Pointer::Base(0x149CFFC).Write(TexturesPath.c_str());
 		Pointer::Base(0x149D000).Write(TexturesBPath.c_str());
 		Pointer::Base(0x149D004).Write(AudioPath.c_str());
-		Pointer::Base(0x149D008).Write(VideoPath.c_str());
 
 		Pointer::Base(0x149D358).Write(FontsPath.c_str());
 		Pointer::Base(0x149D35C).Write(FontsPath.c_str());
@@ -251,7 +266,7 @@ namespace
 		auto engineGobals = engineGlobalsPtr[0];
 
 		// fix in-game team switching for engines that support it
-		engineGobals(0x8).Write(engineGobals(0x4).Read<uint32_t>());
+		engineGobals(0x8).WriteFast(engineGobals(0x4).Read<uint32_t>());
 
 		for (auto& callback : gameStartCallbacks)
 			callback();
@@ -341,7 +356,7 @@ namespace
 	{
 		static auto& modulePlayer = Modules::ModulePlayer::Instance();
 
-		Pointer(a3)(0xAC).Write<float>(0.5f);
+		Pointer(a3)(0xAC).WriteFast<float>(0.5f);
 
 		static auto sub_724BB0 = (void(__thiscall*)(void* thisptr, int a2, int a3, int a4, float* a5))(0x724BB0);
 		sub_724BB0(thisptr, a2, a3, a4, a5);
@@ -356,5 +371,37 @@ namespace
 			return 0;
 
 		return GetBinkVideoPath(p_VideoID, p_DestBuf);
+	}
+
+	void DirtyDiskErrorHookImpl()
+	{
+		MessageBoxA(NULL, "Dirty Disk Error! Your tags are invalid or corrupted.\nIf you have any mods installed please verify that\nthey are installed in the correct order.\n\nElDewrito will now exit.", "There once was a man from Bungie...", MB_ICONERROR);
+		Patches::Core::ExecuteShutdownCallbacks();
+		std::exit(0);
+	}
+
+	__declspec(naked) void DirtyDiskErrorHook()
+	{
+		// "There once was a man from Bungie...... Nothing rhymes with Bungie.but he got a dirty disc error for the Alpha or Profile Build and exploded.  The End."
+		__asm
+		{
+			call DirtyDiskErrorHookImpl;
+		}
+	}
+	int __cdecl GetScreenshotFolderHook(wchar_t *path)
+	{
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> wstring_to_string;
+		std::wstring unprocessed_path = wstring_to_string.from_bytes(Modules::ModuleGame::Instance().VarScreenshotsFolder->ValueString);
+
+		DWORD return_code = ExpandEnvironmentStringsW(unprocessed_path.c_str(), path, MAX_PATH);
+
+		if (return_code == 0 || return_code > MAX_PATH) {// fall back to default
+			static auto GetScreenshotsFolder = (int(__cdecl*)(wchar_t *path))(0x724BB0);
+			return GetScreenshotsFolder(path);
+		}
+		boost::filesystem::path dir(path);
+		dir = boost::filesystem::weakly_canonical(dir);
+		wcsncpy(path, dir.c_str(), 0x100);
+		return SHCreateDirectoryExW(NULL, path, NULL);
 	}
 }
