@@ -256,7 +256,7 @@ namespace
 			// If anything here is going to have any problems, this is the most likely one so allow the ability to print some info about what's going on
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "Destination >> " + Utils::String::ThinString(dest));
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "MaxCount >> " + std::to_string(MaxCount));
-			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Utils::String::ThinString(Blam::GameTypeFileExtension[variantType]));
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Blam::GameTypeFileExtension[variantType]);
 			
 			swprintf_s(dest, MaxCount, L"%ls\\mods\\variants\\%ls\\variant.%ls", currentDir, variantName, Blam::GameTypeFileExtension[variantType]);
 		}
@@ -300,7 +300,7 @@ namespace
 			// If anything here is going to have any problems, this is the most likely one so allow the ability to print some info about what's going on
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "Destination >> " + Utils::String::ThinString(dest));
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "MaxCount >> " + std::to_string(MaxCount));
-			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Utils::String::ThinString(Blam::GameTypeFileExtension[variantType]));
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Blam::GameTypeFileExtension[variantType]);
 
 			swprintf_s(dest, MaxCount, L"%ls\\mods\\variants\\%ls\\variant.%ls", currentDir, variantName, Blam::GameTypeFileExtension[variantType]);
 		}

@@ -1099,7 +1099,7 @@ namespace
 			auto game = &Modules::ModuleGame::Instance();
 			std::wstring_convert<std::codecvt_utf8<wchar_t>> wstring_to_string;
 
-			game->variant_vector = req.responseBody;
+			game->variant_data_vector = req.responseBody;
 			game->variant_name = std::wstring(reinterpret_cast<wchar_t*>(variant_name));
 
 			returnInfo += "game->variant_vector size (" + std::to_string(req.responseBody.size()) + " bytes)\n";
@@ -1321,31 +1321,33 @@ namespace Modules
 
 	void ModuleGame::onVKeyboardInput(std::wstring input)
 	{
-		if (!variant_vector.size())
+		if (!variant_data_vector.size())
 			return;
 		input.substr(0, 15);
-		if (input != mapVariant_name) {
+		if (input != mapVariant_name)
+		{
 			const char* new_name = reinterpret_cast<const char*>(input.c_str());
 
 			// Offset for current variant name - original name will remain untouched
 			int string_offset_1 = 0x48;
 
-			for (int i = 0; i <= 31; i++) {
+			for (int i = 0; i <= 31; i++)
+			{
 				char current_char = 0;
 				if (i <= input.size() * 2)
 					current_char = new_name[i];
-				variant_vector[string_offset_1] = current_char;
+				variant_data_vector[string_offset_1] = current_char;
 				string_offset_1++;
 			}
 		}
 		wchar_t filepath[0x100];
-		if (variant_vector.size() == 0xF000)
+		if (variant_data_vector.size() == 0xF000)
 		{
 			Patches::ContentItems::GetFilePathForMap(input, filepath, true);
 		}
-		else if (variant_vector.size() == 0x1000)
+		else if (variant_data_vector.size() == 0x1000)
 		{
-			Patches::ContentItems::GetFilePathForGameVariant(input, filepath, (int)variant_vector[248], true);
+			Patches::ContentItems::GetFilePathForGameVariant(input, filepath, (int)variant_data_vector[248], true);
 		}
 		else
 		{
@@ -1356,11 +1358,11 @@ namespace Modules
 		FILE* file;
 		if (_wfopen_s(&file, filepath, L"wb") != 0 || !file)
 			return;
-		BYTE* map_data = variant_vector.data();
-		fwrite(map_data, sizeof(BYTE), variant_vector.size(), file);
+		BYTE* map_data = variant_data_vector.data();
+		fwrite(map_data, sizeof(BYTE), variant_data_vector.size(), file);
 		fclose(file);
 		Patches::ContentItems::LoadBLF(filepath);
-		variant_vector.clear();
+		variant_data_vector.clear();
 		return;
 	}
 }

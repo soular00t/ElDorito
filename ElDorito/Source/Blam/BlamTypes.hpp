@@ -37,19 +37,19 @@ namespace Blam
 		"infection"
 	};
 
-	const wchar_t* GameTypeFileExtension[GameTypeCount] =
+	const std::string GameTypeFileExtension[GameTypeCount] =
 	{
-		L"unk",
-		L"ctf",
-		L"slayer",
-		L"oddball",
-		L"koth",
-		L"forge",
-		L"vip",
-		L"jugg",
-		L"terries",
-		L"assault",
-		L"zombies"
+		"unk",
+		"ctf",
+		"slayer",
+		"oddball",
+		"koth",
+		"forge",
+		"vip",
+		"jugg",
+		"terries",
+		"assault",
+		"zombies"
 	};
 
 	enum GameMode : uint32_t
