@@ -4,6 +4,7 @@
 #include "../Blam/BlamEvents.hpp"
 #include "../Blam/BlamNetwork.hpp"
 #include "../Patches/Events.hpp"
+#include "../Patches/Core.hpp"
 #include "../Modules/ModuleServer.hpp"
 #include "../Modules/ModulePlayer.hpp"
 #include "../Utils/Logger.hpp"
@@ -21,7 +22,8 @@ namespace Server::Stats
 	//If we wait for the submit-stats lifecycle state to fire, some of the scores are already reset to 0.
 	time_t sendStatsTime = 0;
 
-	const auto get_lobby_type = (int(__cdecl*)())(0x00435640);
+	std::string playersInfoEndpoint;
+	int numberOfRounds = 1;
 	// retrieves master server endpoints from dewrito.json
 	void GetStatsEndpoints(std::vector<std::string>& destVect)
 	{
@@ -38,12 +40,43 @@ namespace Server::Stats
 			rapidjson::Document json;
 			if (!json.Parse<0>(contents.c_str()).HasParseError() && json.IsObject())
 			{
-				if (json.HasMember("statsServers"))
+				if (json.HasMember("stats")) //
 				{
-					auto& statsArray = json["statsServers"];
-					for (auto it = statsArray.Begin(); it != statsArray.End(); it++)
+					auto& statsObject = json["stats"];
+					if (statsObject.HasMember("submitUrls"))
 					{
-						destVect.push_back((*it)["url"].GetString());
+						auto& submitUrls = statsObject["submitUrls"];
+
+						for (rapidjson::SizeType i = 0; i < submitUrls.Size(); i++)
+						{
+							destVect.push_back(submitUrls[i].GetString());
+						}
+					}
+				}
+			}
+		}
+	}
+
+	void getPlayersInfoEndpoint() {
+		std::ifstream in("mods/dewrito.json", std::ios::in | std::ios::binary);
+		if (in && in.is_open())
+		{
+			std::string contents;
+			in.seekg(0, std::ios::end);
+			contents.resize((unsigned int)in.tellg());
+			in.seekg(0, std::ios::beg);
+			in.read(&contents[0], contents.size());
+			in.close();
+
+			rapidjson::Document json;
+			if (!json.Parse<0>(contents.c_str()).HasParseError() && json.IsObject())
+			{
+				if (json.HasMember("stats")) //
+				{
+					auto& statsObject = json["stats"];
+					if (statsObject.HasMember("playerInfo"))
+					{
+						playersInfoEndpoint = statsObject["playerInfo"].GetString();
 					}
 				}
 			}
@@ -55,10 +88,10 @@ namespace Server::Stats
 	DWORD WINAPI GetPlayersInfo_Thread(LPVOID lpParam)
 	{
 
-		auto* session = Blam::Network::GetActiveSession();
-		if (!session || !session->IsEstablished() || !session->IsHost() || Modules::ModuleServer::Instance().VarPlayerInfoEndpoint->ValueString.empty())
+		if (playersInfoEndpoint.empty())
 			return false;
 
+		auto* session = Blam::Network::GetActiveSession();
 		rapidjson::StringBuffer s;
 		rapidjson::Writer<rapidjson::StringBuffer> writer(s);
 		uint32_t playerInfoBase = 0x2162E08;
@@ -77,10 +110,13 @@ namespace Server::Stats
 
 				uint16_t team = Pointer(playerInfoBase + (5696 * playerIdx) + 32).Read<uint16_t>();
 
+				struct in_addr inAddr;
+				inAddr.S_un.S_addr = session->GetPeerAddress(peerIdx).ToInAddr();
+				char ipStr[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &inAddr, ipStr, sizeof(ipStr));
+
 				char uid[17];
 				Blam::Players::FormatUid(uid, player->Properties.Uid);
-
-				Pointer pvpBase(0x23F5A98);
 
 				writer.Key("name");
 				writer.String(name.c_str());
@@ -88,6 +124,8 @@ namespace Server::Stats
 				writer.Int(playerIdx);
 				writer.Key("uid");
 				writer.String(uid);
+				writer.Key("ip");
+				writer.String(ipStr);
 				writer.EndObject();
 			}
 			peerIdx = session->MembershipInfo.FindNextPeer(peerIdx);
@@ -95,13 +133,12 @@ namespace Server::Stats
 		writer.EndArray();
 		writer.EndObject();
 
-		std::string server = Modules::ModuleServer::Instance().VarPlayerInfoEndpoint->ValueString;
 		HttpRequest req(L"ElDewrito/" + Utils::String::WidenString(Utils::Version::GetVersionString()), L"", L"");
 
 		try
 		{
 			std::string sendObject = s.GetString();
-			if (!req.SendRequest(Utils::String::WidenString(server), L"POST", L"", L"", L"Content-Type: application/json\r\n", (void*)sendObject.c_str(), sendObject.length()))
+			if (!req.SendRequest(Utils::String::WidenString(playersInfoEndpoint), L"POST", L"", L"", L"Content-Type: application/json\r\n", (void*)sendObject.c_str(), sendObject.length()))
 			{
 				Utils::Logger::Instance().Log(Utils::LogTypes::Network, Utils::LogLevel::Info, "Unable to connect to player info endpoint");
 			}
@@ -136,7 +173,7 @@ namespace Server::Stats
 	{
 
 		auto* session = Blam::Network::GetActiveSession();
-		if (!session || !session->IsEstablished() || !session->IsHost() || get_lobby_type() != 2 || !Patches::Network::IsInfoSocketOpen())
+		if (Blam::Network::GetLobbyType() != 2 || Blam::Network::GetNetworkMode() != 3)
 			return false;
 
 		std::vector<std::string> statsEndpoints;
@@ -202,7 +239,7 @@ namespace Server::Stats
 		uint32_t TeamMode = Pointer(0x019A6210).Read<uint32_t>();
 		writer.Key("teamGame");
 		writer.Bool(TeamMode != 0);
-
+		
 		if (TeamMode == 1){
 			writer.Key("teamScores");
 			writer.StartArray();
@@ -214,9 +251,11 @@ namespace Server::Stats
 				for (int t = 0; t < 8; t++)
 				{
 					auto teamscore = engineGobals(t * 0x1A).Read<Blam::TEAM_SCORE>();
-					writer.Int(teamscore.Score);
+					if (numberOfRounds > 1)
+						writer.Int(teamscore.TotalScore);
+					else
+						writer.Int(teamscore.Score);
 				}
-
 			}
 			writer.EndArray();
 		}
@@ -415,6 +454,10 @@ namespace Server::Stats
 	}
 	void LifeCycleStateChanged(Blam::Network::LifeCycleState newState)
 	{
+		auto* session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished() || !session->IsHost())
+			return;
+
 		switch (newState)
 		{
 			case Blam::Network::eLifeCycleStateStartGame:
@@ -425,8 +468,21 @@ namespace Server::Stats
 
 		}
 	}
+
+	void OnGameStart() {
+		auto* session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished() || !session->IsHost())
+			return;
+
+		auto get_number_of_rounds = (int(*)())(0x005504C0);
+		numberOfRounds = get_number_of_rounds();
+	}
 	void OnEvent(Blam::DatumIndex player, const Blam::Events::Event *event, const Blam::Events::EventDefinition *definition)
 	{
+		auto* session = Blam::Network::GetActiveSession();
+		if (!session || !session->IsEstablished() || !session->IsHost())
+			return;
+
 		if (event->NameStringId == 262221) //Game Ended event
 		{
 			time(&sendStatsTime);
@@ -445,7 +501,8 @@ namespace Server::Stats
 	{
 		Patches::Network::OnLifeCycleStateChanged(LifeCycleStateChanged);
 		Patches::Events::OnEvent(OnEvent);
-		
+		Patches::Core::OnGameStart(OnGameStart);
+		getPlayersInfoEndpoint();
 	}
 	void Tick()
 	{

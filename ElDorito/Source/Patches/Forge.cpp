@@ -14,8 +14,8 @@
 #include "../Blam/Tags/Scenario/Scenario.hpp"
 #include "../Blam/Math/RealColorRGB.hpp"
 #include "../Blam/Tags/Camera/AreaScreenEffect.hpp"
-#include "../Blam/Tags/Items/Weapon.hpp"
-#include "../Blam/Tags/Objects//Model.hpp"
+#include "../Blam/Tags/Items/DefinitionWeapon.hpp"
+#include "../Blam/Tags/Models/Model.hpp"
 #include "../ElDorito.hpp"
 #include "Core.hpp"
 #include "../Forge/Prefab.hpp"
@@ -49,7 +49,6 @@ namespace
 	const auto INVISIBLE_MATERIAL_INDEX = 121;
 
 	const auto UI_PlaySound = (void(*)(int index, uint32_t uiSoundTagIndex))(0x00AA5CD0);
-	const auto PrintKillFeedText = (void(__cdecl *)(int hudIndex, wchar_t *text, int a3))(0x00A95920);
 
 	bool barriersEnabledValid = false;
 	bool killBarriersEnabled = true;
@@ -96,6 +95,8 @@ namespace
 
 	void MapVariant_SpawnObjectHook();
 
+	void __fastcall c_game_engine_object_runtime_manager__on_object_spawned_hook(void *thisptr, void *unused, int16_t placementIndex, uint32_t objectIndex);
+
 	void UpdateLightHook(uint32_t lightDatumIndex, int a2, float intensity, int a4);
 	uint32_t __fastcall SpawnItemHook(MapVariant *thisptr, void *unused, uint32_t tagIndex, int a3, int placementIndex,
 		RealVector3D *position, RealVector3D *forward, RealVector3D *up,
@@ -106,6 +107,8 @@ namespace
 	struct ScreenEffectData;
 	void ScreenEffectsHook(RealVector3D *a1, RealVector3D *a2, ScreenEffectData *renderData, void *a4, int localPlayerIndex);
 	void GameEngineTickHook();
+
+	bool __fastcall sub_724890_hook(void *thisptr, void *unused, int a2, int a3, float *matrix);
 
 
 	void GrabSelection(uint32_t playerIndex);
@@ -224,6 +227,11 @@ namespace Patches::Forge
 		Hook(0x2D8F82, sub_980E40_hook, HookFlags::IsCall).Apply();
 
 		Hook(0x19F0B8, sandbox_zone_shape_render_hook, HookFlags::IsCall).Apply();
+
+		// fix jump canceling on forged objects
+		Hook(0x3245FD, sub_724890_hook, HookFlags::IsCall).Apply();
+
+		Hook(0x19004E, c_game_engine_object_runtime_manager__on_object_spawned_hook, HookFlags::IsCall).Apply();
 	}
 
 	void Tick()
@@ -286,6 +294,7 @@ namespace
 		Forge::Magnets::Shutdown();
 
 		Forge::Selection::Clear();
+		Forge::SelectionRenderer::SetEnabled(false);
 	}
 
 	void SandboxEngineTickHook()
@@ -345,11 +354,15 @@ namespace
 				}
 			}
 
-			if (Blam::Input::GetKeyTicks(Blam::Input::eKeyCodeM, Blam::Input::eInputTypeGame) == 1)
+			if (Blam::Input::GetKeyTicks(Blam::Input::eKeyCodeM, Blam::Input::eInputTypeGame) == 1
+				|| (!(Blam::Input::GetActionState(Blam::Input::eGameActionUiDown)->Flags & Blam::Input::eActionStateFlagsHandled)
+					&& Blam::Input::GetActionState(Blam::Input::eGameActionUiDown)->Ticks == 1))
 			{
 				auto prevValue = moduleForge.VarMagnetsEnabled->ValueInt;
+				std::string previousValueStr;
+
 				auto& commandMap = Modules::CommandMap::Instance();
-				commandMap.SetVariable(moduleForge.VarMagnetsEnabled, std::to_string(prevValue ? 0 : 1), std::to_string(prevValue));
+				commandMap.SetVariable(moduleForge.VarMagnetsEnabled, std::to_string(prevValue ? 0 : 1), previousValueStr);
 				if (!prevValue)
 					PrintKillFeedText(0, L"Magnets Enabled", 0);
 				else
@@ -438,7 +451,7 @@ namespace
 			return;
 
 		Blam::Tags::TagInstance instance(s_SpawnItemTagIndex);
-		auto def = instance.GetDefinition<void>(s_SpawnItemTagIndex);
+		auto def = instance.GetDefinition<void>();
 		auto groupTag = def ? instance.GetGroupTag() : 0;
 
 		s_SpawnItemTagIndex = -1;
@@ -896,31 +909,31 @@ namespace
 
 	void DoClone(uint32_t playerIndex, uint32_t objectIndexUnderCrosshair)
 	{
-	if (objectIndexUnderCrosshair != -1)
-	{
-		auto& forgeModule = Modules::ModuleForge::Instance();
-		auto cloneDepth = forgeModule.VarCloneDepth->ValueFloat;
-		auto cloneMultiplier = forgeModule.VarCloneMultiplier->ValueInt;
-
-		auto sandboxGlobals = Forge::GetSandboxGlobals();
-		const RealVector3D& intersectNormal = sandboxGlobals.CrosshairIntersectNormals[playerIndex & 0xF];
-
-		auto objectIndexToClone = objectIndexUnderCrosshair;
-		for (auto i = 0; i < cloneMultiplier; i++)
+		if (objectIndexUnderCrosshair != -1)
 		{
-			objectIndexToClone = CloneObject(playerIndex, objectIndexToClone, cloneDepth, intersectNormal);
-			if (objectIndexToClone == -1)
-				break;
+			auto& forgeModule = Modules::ModuleForge::Instance();
+			auto cloneDepth = forgeModule.VarCloneDepth->ValueFloat;
+			auto cloneMultiplier = forgeModule.VarCloneMultiplier->ValueInt;
+
+			auto sandboxGlobals = Forge::GetSandboxGlobals();
+			const RealVector3D& intersectNormal = sandboxGlobals.CrosshairIntersectNormals[playerIndex & 0xF];
+
+			auto objectIndexToClone = objectIndexUnderCrosshair;
+			for (auto i = 0; i < cloneMultiplier; i++)
+			{
+				objectIndexToClone = CloneObject(playerIndex, objectIndexToClone, cloneDepth, intersectNormal);
+				if (objectIndexToClone == -1)
+					break;
+			}
 		}
-	}
-	else
-	{
-		if (Forge::Selection::GetSelection().Any())
+		else
 		{
-			if (Forge::Selection::Clone())
-				GrabSelection(playerIndex);
+			if (Forge::Selection::GetSelection().Any())
+			{
+				if (Forge::Selection::Clone())
+					GrabSelection(playerIndex);
+			}
 		}
-	}
 	}
 
 	bool CanThemeObject(uint32_t objectIndex)
@@ -997,8 +1010,14 @@ namespace
 		{
 			switch (object->TagIndex)
 			{
-			case Forge::PrematchCamera::CAMERA_OBJECT_TAG_INDEX:
 			case Forge::Volumes::KILL_VOLUME_TAG_INDEX:
+			{
+				auto properties = object->GetMultiplayerProperties();
+				if (properties && ((Forge::ForgeKillVolumeProperties*)&properties->TeleporterChannel)->Flags
+					& Forge::ForgeKillVolumeProperties::eKillVolumeFlags_AlwaysVisible)
+					break;
+			}
+			case Forge::PrematchCamera::CAMERA_OBJECT_TAG_INDEX:
 			case Forge::Volumes::GARBAGE_VOLUME_TAG_INDEX:
 				if (!is_forge())
 					return;
@@ -1323,7 +1342,7 @@ namespace
 	
 		if (IsForge())
 		{
-			auto objectDef = Blam::Tags::TagInstance(budget.TagIndex).GetDefinition<Blam::Tags::Objects::Object>('obje');
+			auto objectDef = Blam::Tags::TagInstance(budget.TagIndex).GetDefinition<Blam::Tags::Objects::Object>();
 			if (objectDef && objectDef->MultiplayerProperties.Count)
 			{
 				auto engineFlags = objectDef->MultiplayerProperties.Elements[0].EngineFlags;
@@ -1404,14 +1423,14 @@ namespace
 		const auto sub_715E90 = (char(__cdecl *)(int a1, float boundingRadius, int a3, int a4,
 			int a5, const RealVector3D *a6, int a7, int a8, RealVector3D *newPosition, char a10))(0x715E90);
 
-		auto object = Blam::Tags::TagInstance(tagIndex).GetDefinition<Blam::Tags::Objects::Object>('obje');
+		auto object = Blam::Tags::TagInstance(tagIndex).GetDefinition<Blam::Tags::Objects::Object>();
 		if (!object)
 			return false;
 
 		auto boundingRadius = object->BoundingRadius;
 		if (object->Model.TagIndex != -1)
 		{
-			auto hlmtDef = Blam::Tags::TagInstance(object->Model.TagIndex).GetDefinition<Blam::Tags::Objects::Model>('hlmt');
+			auto hlmtDef = Blam::Tags::TagInstance(object->Model.TagIndex).GetDefinition<Blam::Tags::Models::Model>();
 			if (hlmtDef && hlmtDef->ModelObjectData.Count)
 			{
 				const auto &modelobjectData = hlmtDef->ModelObjectData.Elements[0];
@@ -1537,7 +1556,7 @@ namespace
 		float Turbulance;
 	};
 
-	void FillScreenEffectRenderData(Blam::Tags::AreaScreenEffect::ScreenEffect& screenEffectDef, float t, ScreenEffectData *data)
+	void FillScreenEffectRenderData(Blam::Tags::Camera::AreaScreenEffect::ScreenEffect& screenEffectDef, float t, ScreenEffectData *data)
 	{
 		auto v29 = data->LightIntensity;
 		if (data->LightIntensity <= (t * screenEffectDef.LightIntensity))
@@ -1612,7 +1631,7 @@ namespace
 	void ScreenEffectsHook(RealVector3D *a1, RealVector3D *a2, ScreenEffectData *renderData, void *a4, int localPlayerIndex)
 	{
 		const auto sub_683190 = (void(*)(RealVector3D *a1, RealVector3D *a2, ScreenEffectData *data, int a4, int a5))(0x683190);
-		const auto sub_682C10 = (float(__thiscall *)(Blam::Tags::AreaScreenEffect::ScreenEffect *screenEffect, float distance, float a3, float secondsAlive, float *a5))(0x682C10);
+		const auto sub_682C10 = (float(__thiscall *)(Blam::Tags::Camera::AreaScreenEffect::ScreenEffect *screenEffect, float distance, float a3, float secondsAlive, float *a5))(0x682C10);
 		const auto sub_682A90 = (unsigned __int32(__thiscall *)(void *thisptr, void *a2, int a3, float a4, int a5, void * a6))(0x682A90);
 		const auto sub_A44FD0 = (bool(*)(int localPlayerIndex, uint32_t objectIndex))(0xA44FD0);
 		const auto sub_4EEC40 = (float(*)(RealVector3D *position, RealVector3D *forward))(0x4EEC40);
@@ -1641,10 +1660,10 @@ namespace
 		auto &screenEffectDatumArray = ElDorito::GetMainTls(0x338)[0].Read<Blam::DataArray<ScreenEffectDatum>>();
 		for (auto &screenEffectDatum : screenEffectDatumArray)
 		{
-			auto sefc = Blam::Tags::TagInstance(screenEffectDatum.TagIndex).GetDefinition<Blam::Tags::AreaScreenEffect>();
-			if (!sefc || sefc->ScreenEffect2.Count <= 0)
+			auto sefc = Blam::Tags::TagInstance(screenEffectDatum.TagIndex).GetDefinition<Blam::Tags::Camera::AreaScreenEffect>();
+			if (!sefc || sefc->ScreenEffects.Count <= 0)
 				continue;
-			auto screenEffectDef = sefc->ScreenEffect2.Elements[0];
+			auto screenEffectDef = sefc->ScreenEffects.Elements[0];
 			if (screenEffectDef.Duration > 0 && screenEffectDatum.SecondsAlive > screenEffectDef.Duration)
 				continue;
 
@@ -1773,7 +1792,7 @@ namespace
 			if (!object)
 				return;
 
-			auto objectDef = Blam::Tags::TagInstance(object->TagIndex).GetDefinition<ObjectDefinition>('obje');
+			auto objectDef = Blam::Tags::TagInstance(object->TagIndex).GetDefinition<ObjectDefinition>();
 			auto cachedRenderStateIndex = *(uint32_t*)object_get_render_data(objectIndex);
 
 			
@@ -1915,5 +1934,33 @@ namespace
 
 		sandbox_zone_shape_render_hook(zone, color, objectIndex);
 
+	}
+
+	bool __fastcall sub_724890_hook(void *thisptr, void *unused, int a2, int a3, float *matrix)
+	{
+		const auto sub_724890 = (bool(__thiscall*)(void *thisptr, int a2, int a3, float *matrix))(0x724890);
+		auto ret = sub_724890(thisptr, a2, a3, matrix);
+
+		auto havokComponents = *(Blam::DataArray<Blam::DatumBase>**)0x02446080;
+		auto &groundHavokComponentIndex = *(uint32_t*)((uint8_t*)thisptr + 0x1c);
+		uint8_t *groundHavokComponent;
+		if (groundHavokComponentIndex != -1 && (groundHavokComponent = (uint8_t*)havokComponents->Get(groundHavokComponentIndex)))
+		{
+			auto groundObjectIndex = *(uint32_t*)(groundHavokComponent + 0x8);
+			if (groundObjectIndex != -1)
+			{
+				if (ObjectIsPhased(groundObjectIndex))
+					groundHavokComponentIndex = -1;
+			}
+		}
+
+		return ret;
+	}
+
+	void __fastcall c_game_engine_object_runtime_manager__on_object_spawned_hook(void *thisptr, void *unused, int16_t placementIndex, uint32_t objectIndex)
+	{
+		const auto c_game_engine_object_runtime_manager__on_object_spawned = (void(__thiscall*)(void *thisptr, int16_t placementIndex, uint32_t objectIndex))(0x00590600);
+		if (!CanThemeObject(objectIndex)) // ignore reforge
+			c_game_engine_object_runtime_manager__on_object_spawned(thisptr, placementIndex, objectIndex);
 	}
 }

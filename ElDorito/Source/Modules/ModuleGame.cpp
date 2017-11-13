@@ -1051,10 +1051,10 @@ namespace
 			return false;
 		}
 
-		auto sefc = Blam::Tags::TagInstance(sefcIndex.TagIndex).GetDefinition<Blam::Tags::AreaScreenEffect>('sefc');
+		auto sefc = Blam::Tags::TagInstance(sefcIndex.TagIndex).GetDefinition<Blam::Tags::Camera::AreaScreenEffect>();
 		if(sefc)
 		{
-			sefc->ScreenEffect2[index].MaximumDistance = range;
+			sefc->ScreenEffects[index].MaximumDistance = range;
 			return true;
 		}
 

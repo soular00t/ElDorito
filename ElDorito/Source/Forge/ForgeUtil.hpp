@@ -87,6 +87,18 @@ namespace Forge
 	};
 	static_assert(sizeof(ForgeGarbageVolumeProperties) <= 1, "ForgeGarbageVolumeProperties must be 1 bytes or less in size");
 
+	struct ForgeKillVolumeProperties
+	{
+		enum KillVolumeFlags
+		{
+			eKillVolumeFlags_AlwaysVisible = (1 << 0),
+			eKillVolumeFlags_DestroyVehicles = (1 << 1)
+		};
+
+		uint8_t Flags : 8;
+	};
+	static_assert(sizeof(ForgeKillVolumeProperties) <= 1, "ForgeKillVolumeProperties must be 1 bytes or less in size");
+
 	struct ZoneShape
 	{
 		int Shape;
@@ -154,6 +166,7 @@ namespace Forge
 	const auto GetEditorModeState = (bool(__cdecl *)(uint32_t playerIndex, uint32_t* heldObjectIndex, uint32_t* objectIndexUnderCrosshair))(0x59A6F0);
 	const auto GetSandboxGlobals = (SandboxGlobals&(*)())(0x0059BC10);
 	const auto ObjectIsPhased = (bool(*)(uint32_t objectIndex))(0x0059A7B0);
+	const auto PrintKillFeedText = (void(__cdecl *)(int hudIndex, wchar_t *text, int a3))(0x00A95920);
 
 	Blam::MapVariant* GetMapVariant();
 
@@ -164,5 +177,4 @@ namespace Forge
 	uint32_t CloneObject(uint32_t playerIndex, uint32_t objectIndex, float depth, const Blam::Math::RealVector3D &normal);
 	void ThrowObject(uint32_t playerIndex, uint32_t objectIndex, float throwForce);
 	void CanvasMap();
-	bool ObjectIsForgeLight(uint32_t objectTagIndex);
 }
