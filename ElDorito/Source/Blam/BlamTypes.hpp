@@ -37,6 +37,21 @@ namespace Blam
 		"infection"
 	};
 
+	const wchar_t* GameTypeFileExtension[GameTypeCount] =
+	{
+		L"unk",
+		L"ctf",
+		L"slayer",
+		L"oddball",
+		L"koth",
+		L"forge",
+		L"vip",
+		L"jugg",
+		L"terries",
+		L"assault",
+		L"zombies"
+	};
+
 	enum GameMode : uint32_t
 	{
 		InvalidMode = 0,

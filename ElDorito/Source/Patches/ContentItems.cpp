@@ -79,7 +79,6 @@ namespace
 	void GetFilePathForItem(wchar_t* dest, size_t MaxCount, const wchar_t* variantName, int variantMode, int variantType);
 	void GetFilePathForItem(wchar_t* dest, size_t MaxCount, const wchar_t* variantName, int variantMode, int variantType, bool bIsDownload);
 	bool AddContentItem(wchar_t* itemPath);
-	wchar_t* GameTypeString(int variantType);
 }
 
 namespace Patches::ContentItems
@@ -257,9 +256,9 @@ namespace
 			// If anything here is going to have any problems, this is the most likely one so allow the ability to print some info about what's going on
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "Destination >> " + Utils::String::ThinString(dest));
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "MaxCount >> " + std::to_string(MaxCount));
-			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Utils::String::ThinString(GameTypeString(variantType)));
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Utils::String::ThinString(Blam::GameTypeFileExtension[variantType]));
 			
-			swprintf_s(dest, MaxCount, L"%ls\\mods\\variants\\%ls\\variant.%ls", currentDir, variantName, GameTypeString(variantType));
+			swprintf_s(dest, MaxCount, L"%ls\\mods\\variants\\%ls\\variant.%ls", currentDir, variantName, Blam::GameTypeFileExtension[variantType]);
 		}
 		else
 		{
@@ -301,9 +300,9 @@ namespace
 			// If anything here is going to have any problems, this is the most likely one so allow the ability to print some info about what's going on
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "Destination >> " + Utils::String::ThinString(dest));
 			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "MaxCount >> " + std::to_string(MaxCount));
-			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Utils::String::ThinString(GameTypeString(variantType)));
+			Utils::Logger::Instance().Log(Utils::LogTypes::Game, Utils::LogLevel::Info, "File Path String >> " + Utils::String::ThinString(currentDir) + "\\mods\\variants\\" + Utils::String::ThinString(variantName) + "\\variant." + Utils::String::ThinString(Blam::GameTypeFileExtension[variantType]));
 
-			swprintf_s(dest, MaxCount, L"%ls\\mods\\variants\\%ls\\variant.%ls", currentDir, variantName, GameTypeString(variantType));
+			swprintf_s(dest, MaxCount, L"%ls\\mods\\variants\\%ls\\variant.%ls", currentDir, variantName, Blam::GameTypeFileExtension[variantType]);
 		}
 		else
 		{
@@ -473,38 +472,6 @@ namespace
 	bool IsProfileAvailable()
 	{
 		return true;
-	}
-
-	wchar_t* GameTypeString(int variantType)
-	{
-		// Perhaps move this into Blam/BlamTypes as GameTypeFileExtension as not all extensions match UI names
-		switch (variantType)
-		{
-		case 0:
-			return L"unk";
-		case 1:
-			return L"ctf";
-		case 2:
-			return L"slayer";
-		case 3:
-			return L"oddball";
-		case 4:
-			return L"koth";
-		case 5:
-			return L"forge";
-		case 6:
-			return L"vip";
-		case 7:
-			return L"jugg";
-		case 8:
-			return L"terries";
-		case 9:
-			return L"assault";
-		case 10:
-			return L"zombiez";
-		default:
-			return L"default";
-		}
 	}
 
 	char *GetDirectoryPath(char *path, char* buff, int bufflen)
