@@ -49,7 +49,7 @@ namespace Blam
 		"jugg",
 		"terries",
 		"assault",
-		"zombies"
+		"zombiez"
 	};
 
 	enum GameMode : uint32_t
