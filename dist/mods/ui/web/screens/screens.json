@@ -8,6 +8,13 @@
 			"zIndex": 1
 		},
 		{
+			"id": "fileshare",
+			"url": "http://files.dewsha.re/",
+			"fallbackUrl": "dew://screens/error/",
+			"captureInput": true,
+			"zIndex": 0
+		},
+		{
 			"id": "console",
 			"url": "dew://screens/console/",
 			"captureInput": true,
