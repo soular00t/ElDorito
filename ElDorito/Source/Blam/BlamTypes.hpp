@@ -37,6 +37,21 @@ namespace Blam
 		"infection"
 	};
 
+	const std::string GameTypeFileExtension[GameTypeCount] =
+	{
+		"unk",
+		"ctf",
+		"slayer",
+		"oddball",
+		"koth",
+		"forge",
+		"vip",
+		"jugg",
+		"terries",
+		"assault",
+		"zombies"
+	};
+
 	enum GameMode : uint32_t
 	{
 		InvalidMode = 0,
